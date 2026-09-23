@@ -11,6 +11,7 @@ public sealed class AnalysisJobEntity
     public DateTimeOffset UpdatedAt { get; set; }
     public Track? Track { get; set; }
     public string? AcquiredAudioPath { get; set; }
+    public string? PreprocessedAudioPath { get; set; }
     public AnalysisResult? Result { get; set; }
     public string? FailureReason { get; set; }
 }

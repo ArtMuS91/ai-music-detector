@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using Core.Models;
 using Core.Services;
@@ -32,91 +31,36 @@ public sealed class YtDlpAudioAcquisitionService(
             ?? Path.Combine(Path.GetTempPath(), "ai-music-detector", "audio");
         Directory.CreateDirectory(workingDirectory);
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(_options.Timeout);
+        var result = await ExternalProcess.RunAsync(
+            _options.ExecutablePath,
+            BuildArguments(workingDirectory, url),
+            _options.Timeout,
+            logger,
+            cancellationToken);
 
-        var (exitCode, stdout, stderr) = await RunAsync(workingDirectory, url, timeout.Token);
-
-        if (exitCode != 0)
+        if (result.ExitCode != 0)
         {
-            logger.LogWarning("yt-dlp exited with {ExitCode} for {VideoId}: {Error}", exitCode, url.VideoId, stderr);
-            throw new AudioAcquisitionException($"yt-dlp failed (exit code {exitCode}): {Summarize(stderr)}");
+            logger.LogWarning("yt-dlp exited with {ExitCode} for {VideoId}: {Error}", result.ExitCode, url.VideoId, result.Stderr);
+            throw new AudioAcquisitionException(
+                $"yt-dlp failed (exit code {result.ExitCode}): {ExternalProcess.Summarize(result.Stderr)}");
         }
 
         var filePath = Directory.EnumerateFiles(workingDirectory, $"{url.VideoId}.*").FirstOrDefault()
             ?? throw new AudioAcquisitionException("yt-dlp reported success but produced no audio file.");
 
-        return new AcquiredAudio(filePath, ReadTrackMetadata(stdout, url));
+        return new AcquiredAudio(filePath, ReadTrackMetadata(result.Stdout, url));
     }
 
-    private async Task<(int ExitCode, string Stdout, string Stderr)> RunAsync(
-        string workingDirectory,
-        YouTubeUrl url,
-        CancellationToken cancellationToken)
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = _options.ExecutablePath,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-
-        startInfo.ArgumentList.Add("--no-playlist");
-        startInfo.ArgumentList.Add("--no-progress");
-        startInfo.ArgumentList.Add("--quiet");
-        startInfo.ArgumentList.Add("--format");
-        startInfo.ArgumentList.Add("bestaudio");
-        startInfo.ArgumentList.Add("--output");
-        startInfo.ArgumentList.Add(Path.Combine(workingDirectory, "%(id)s.%(ext)s"));
-        startInfo.ArgumentList.Add("--print-json");
-        startInfo.ArgumentList.Add(url.CanonicalUrl);
-
-        using var process = new Process { StartInfo = startInfo };
-
-        try
-        {
-            process.Start();
-        }
-        catch (Exception ex)
-        {
-            throw new AudioAcquisitionException(
-                $"Could not start '{_options.ExecutablePath}'. Is yt-dlp installed and on PATH?", ex);
-        }
-
-        var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
-
-        try
-        {
-            await process.WaitForExitAsync(cancellationToken);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            TryKill(process);
-            throw new AudioAcquisitionException($"yt-dlp timed out after {_options.Timeout}.");
-        }
-        catch (OperationCanceledException)
-        {
-            TryKill(process);
-            throw;
-        }
-
-        return (process.ExitCode, await stdout, await stderr);
-    }
-
-    private void TryKill(Process process)
-    {
-        try
-        {
-            process.Kill(entireProcessTree: true);
-        }
-        catch (Exception ex)
-        {
-            logger.LogDebug(ex, "Could not kill the yt-dlp process after cancellation.");
-        }
-    }
+    private static IEnumerable<string> BuildArguments(string workingDirectory, YouTubeUrl url) =>
+    [
+        "--no-playlist",
+        "--no-progress",
+        "--quiet",
+        "--format", "bestaudio",
+        "--output", Path.Combine(workingDirectory, "%(id)s.%(ext)s"),
+        "--print-json",
+        url.CanonicalUrl,
+    ];
 
     private Track ReadTrackMetadata(string stdout, YouTubeUrl url)
     {
@@ -164,12 +108,4 @@ public sealed class YtDlpAudioAcquisitionService(
             out var parsed)
             ? parsed
             : null;
-
-    private static string Summarize(string stderr)
-    {
-        var lastLine = stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .LastOrDefault();
-
-        return string.IsNullOrEmpty(lastLine) ? "no error output" : lastLine;
-    }
 }

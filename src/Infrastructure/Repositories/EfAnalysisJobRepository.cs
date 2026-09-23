@@ -61,4 +61,12 @@ public sealed class EfAnalysisJobRepository(AnalysisDbContext db, TimeProvider c
 
         return job;
     }
+
+    public async Task<IReadOnlyList<AnalysisJobEntity>> ListInProgressAsync(CancellationToken cancellationToken = default)
+        => await db.Jobs
+            .Where(x => x.Status == AnalysisStatus.Acquiring
+                || x.Status == AnalysisStatus.Preprocessing
+                || x.Status == AnalysisStatus.Analyzing)
+            .OrderBy(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
 }
