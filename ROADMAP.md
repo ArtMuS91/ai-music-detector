@@ -36,6 +36,7 @@ Phases are ordered by dependency, so each one should leave the project in a runn
   - Vocal synthesis indicators (Hugging Face audio deepfake models)
   - Generative-audio artifacts
   - Metadata heuristics (title/channel patterns, upload metadata)
+  - ✅ Web research (done early, alongside Phase 2): `GroqWebResearchSignalProvider` asks a Groq GPT-OSS model with `browser_search` whether the track/artist is publicly known to be AI-generated, returning a score, a confidence-based weight, and evidence links verified against the actual search results. Stored in the result's signals; the verdict stays `Inconclusive` until Phase 4
 - Optional vocal/transcription analysis via Whisper
 - `Analysis` implements `IDetectionSignalProvider` by calling the `ml/` service over HTTP; add it to `docker-compose.yml`
 

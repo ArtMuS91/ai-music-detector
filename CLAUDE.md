@@ -13,9 +13,9 @@ Monorepo with two independently-run apps sharing one git history:
 - `src/` — .NET 10 solution (`AiMusicDetector.slnx`)
   - `Api` — ASP.NET Core minimal API (entry point), references `Core`, `Infrastructure`, `Analysis`
   - `Core` — EF-mapped entities (`Core.Entities`), plain domain models (`Core.Models`), and the interfaces other projects implement, split into `Core.Repositories` (persistence seams) and `Core.Services` (business-logic and external-integration seams)
-  - `Infrastructure` — implements `Core.Repositories` (EF Core/Postgres) and the external-integration half of `Core.Services` (yt-dlp acquisition, ffmpeg preprocessing), under matching `Repositories`/`Services` folders; references `Core`
+  - `Infrastructure` — implements `Core.Repositories` (EF Core/Postgres) and the external-integration half of `Core.Services` (yt-dlp acquisition, ffmpeg preprocessing, Groq web research), under matching `Repositories`/`Services` folders; references `Core`
   - `Analysis` — implements the business-logic half of `Core.Services` (`IAnalysisService`, `IAnalysisPipeline` today; detection/aggregation later) under its own `Services` folder; references `Core`
-- `tests/Core.Tests` — xUnit, references `Core` and `Analysis`
+- `tests/Core.Tests` — xUnit, references `Core`, `Analysis` and `Infrastructure` (external integrations are tested against stubbed `HttpMessageHandler`s / fakes, never real services)
 - `web/` — Vite + React + TypeScript + MUI frontend
 
 Planned but not yet present: `ml/` (Python ML models).
@@ -23,6 +23,8 @@ Planned but not yet present: `ml/` (Python ML models).
 **yt-dlp** is the open-source CLI tool `Infrastructure` shells out to for downloading the audio-only stream from a YouTube/YouTube Music URL — it is not a library dependency, just an executable. The API's Docker image (`src/Api/Dockerfile`) bundles the standalone `yt-dlp_linux` binary so nothing needs installing on the host when running via `docker compose`; running the API with `dotnet run` instead requires `yt-dlp` on the host `PATH` (see Prerequisites below).
 
 **ffmpeg** is the second CLI tool `Infrastructure` shells out to: preprocessing uses it to decode whatever yt-dlp downloaded (webm/opus, m4a, ...) into mono 16-bit PCM WAV at a fixed sample rate, trimmed to a window from the middle of the track (`Ffmpeg` section in `appsettings.json`). The Docker image installs it via apt; `dotnet run` needs it on the host `PATH`.
+
+**Groq** powers the one detection signal that exists so far, `GroqWebResearchSignalProvider`: it sends the track's title/artist to a GPT-OSS model with Groq's built-in `browser_search` tool and asks whether the track or artist is publicly known to be AI-generated. Evidence links are kept only if they appear in the search results Groq reports in `executed_tools` — the model's own cited URLs are never trusted on their own. The API key is a secret: put `GROQ_API_KEY=...` in the gitignored `.env` at the repo root (docker compose passes it as `Groq__ApiKey`); for `dotnet run`, set the `Groq__ApiKey` environment variable. Without a key the provider fails and the pipeline simply leaves that signal out.
 
 `ROADMAP.md` tracks the phased MVP plan — check it before starting new work to see which phase a change belongs to.
 
@@ -59,7 +61,7 @@ Planned but not yet present: `ml/` (Python ML models).
 - Detection is deliberately many independent `IDetectionSignalProvider`s rather than one classifier, so a weak or failing detector lowers confidence instead of breaking the analysis.
 - Work is queued, not done in the request: `POST /api/analyze` persists a job and returns 202, `AnalysisWorker` (an `IHostedService` inside the API process — no separate worker project) claims it, `AnalysisPipeline` runs it through every stage to `Completed`/`Failed` and deletes its audio files, and the client polls `GET /api/analyze/{id}`.
 - **One job at a time, one worker.** The MVP deliberately processes jobs sequentially in a single worker. That is what makes startup recovery simple: when the worker starts, nothing can really be in flight, so `IAnalysisPipeline.RecoverInterruptedAsync` requeues any job still in `Acquiring`/`Preprocessing`/`Analyzing` (stranded by a shutdown) and deletes its leftover audio. Claiming still uses `FOR UPDATE SKIP LOCKED`, but running a second worker (another replica or parallel loops) would also need a lease/heartbeat, or recovery would requeue a job another worker still owns.
-- Until detection signals (Phase 3) and aggregation (Phase 4) exist, the pipeline completes jobs with an `Inconclusive` result and no signals.
+- Signal providers are all `IDetectionSignalProvider`s registered in DI; the pipeline runs each one during `Analyzing` and leaves out any that throws. Until aggregation (Phase 4) exists, the result keeps the collected signals (with their `Evidence` links) but the verdict stays `Inconclusive`.
 - `AnalysisJob.Track` and `.Result` are stored as `jsonb` via value converters — they are read and written whole, never queried by inner fields, which keeps migrations out of the way as those shapes evolve.
 - Acquisition deliberately does not transcode, so it needs no ffmpeg; format normalization belongs to preprocessing.
 - **Database naming**: Postgres identifiers (tables, columns) are snake_case, applied automatically by `EFCore.NamingConventions`'s `.UseSnakeCaseNamingConvention()` in `InfrastructureServiceCollectionExtensions`. Don't hand-roll column names to work around this — raw SQL (e.g. the `FOR UPDATE SKIP LOCKED` query in `EfAnalysisJobRepository`) must reference the snake_case names directly since the naming convention doesn't rewrite raw SQL.

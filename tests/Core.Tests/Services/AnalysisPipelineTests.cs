@@ -13,25 +13,28 @@ public sealed class AnalysisPipelineTests : IDisposable
     private readonly FakeJobRepository _jobs = new();
     private readonly FakeAcquisition _acquisition;
     private readonly FakePreprocessor _preprocessor;
+    private readonly List<IDetectionSignalProvider> _signalProviders = [];
     private readonly AnalysisPipeline _pipeline;
 
     public AnalysisPipelineTests()
     {
         _acquisition = new FakeAcquisition(_directory);
         _preprocessor = new FakePreprocessor();
-        _pipeline = new AnalysisPipeline(_jobs, _acquisition, _preprocessor, NullLogger<AnalysisPipeline>.Instance);
+        _pipeline = new AnalysisPipeline(_jobs, _acquisition, _preprocessor, _signalProviders, NullLogger<AnalysisPipeline>.Instance);
     }
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
 
     [Fact]
-    public async Task SuccessfulRun_CompletesInconclusively_AndReportsPreprocessingOnTheWay()
+    public async Task SuccessfulRun_CompletesInconclusively_AndReportsEachStageOnTheWay()
     {
         var job = NewJob(AnalysisStatus.Acquiring);
 
         await _pipeline.RunAsync(job);
 
-        Assert.Equal([AnalysisStatus.Preprocessing, AnalysisStatus.Completed], _jobs.SavedStatuses);
+        Assert.Equal(
+            [AnalysisStatus.Preprocessing, AnalysisStatus.Analyzing, AnalysisStatus.Completed],
+            _jobs.SavedStatuses);
         Assert.Equal(AnalysisVerdict.Inconclusive, job.Result?.Verdict);
         Assert.NotNull(job.Track);
     }
@@ -47,6 +50,33 @@ public sealed class AnalysisPipelineTests : IDisposable
         Assert.False(File.Exists(_preprocessor.LastFilePath));
         Assert.Null(job.AcquiredAudioPath);
         Assert.Null(job.PreprocessedAudioPath);
+    }
+
+    [Fact]
+    public async Task Signals_AreKeptInTheResult_WithTheirEvidence()
+    {
+        var evidence = new EvidenceLink("https://example.com/ai-band", "AI band exposed", EvidenceStance.AiGenerated);
+        _signalProviders.Add(new FakeSignalProvider(new Signal("Web research", 0.9, 0.8, "Known AI act", [evidence])));
+        var job = NewJob(AnalysisStatus.Acquiring);
+
+        await _pipeline.RunAsync(job);
+
+        var signal = Assert.Single(job.Result!.Signals);
+        Assert.Equal([evidence], signal.Evidence);
+        Assert.Equal(AnalysisVerdict.Inconclusive, job.Result.Verdict);
+    }
+
+    [Fact]
+    public async Task FailingSignalProvider_IsLeftOut_WithoutFailingTheJob()
+    {
+        _signalProviders.Add(new FakeSignalProvider(failure: new HttpRequestException("Groq is down")));
+        _signalProviders.Add(new FakeSignalProvider(new Signal("Spectral", 0.2, 0.5)));
+        var job = NewJob(AnalysisStatus.Acquiring);
+
+        await _pipeline.RunAsync(job);
+
+        Assert.Equal(AnalysisStatus.Completed, job.Status);
+        Assert.Equal("Spectral", Assert.Single(job.Result!.Signals).Name);
     }
 
     [Fact]
@@ -137,6 +167,14 @@ public sealed class AnalysisPipelineTests : IDisposable
 
         public Task<AnalysisJobEntity?> ClaimNextPendingAsync(CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
+    }
+
+    private sealed class FakeSignalProvider(Signal? signal = null, Exception? failure = null) : IDetectionSignalProvider
+    {
+        public string Name => signal?.Name ?? "Failing";
+
+        public Task<Signal> DetectAsync(PreprocessedAudio audio, Track track, CancellationToken cancellationToken = default)
+            => failure is null ? Task.FromResult(signal!) : Task.FromException<Signal>(failure);
     }
 
     private sealed class FakeAcquisition(string directory) : IAudioAcquisitionService

@@ -24,6 +24,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=aimusicdetector;Username=postgres;Password=postgres
+      # Read from the gitignored .env next to this file; web research is skipped when unset.
+      Groq__ApiKey: ${GROQ_API_KEY:-}
     ports:
       - "5214:8080"
     depends_on:

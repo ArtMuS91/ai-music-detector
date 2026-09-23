@@ -14,6 +14,6 @@ public sealed record AnalysisResultResponse(
             result.Verdict.ToString(),
             result.AiProbability,
             result.Confidence,
-            [.. result.Signals.Select(s => new SignalResponse(s.Name, s.Score, s.Weight, s.Detail))],
+            [.. result.Signals.Select(SignalResponse.From)],
             result.Explanation);
 }

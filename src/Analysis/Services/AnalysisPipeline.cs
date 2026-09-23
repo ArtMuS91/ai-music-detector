@@ -10,18 +10,9 @@ public sealed class AnalysisPipeline(
     IAnalysisJobRepository jobs,
     IAudioAcquisitionService acquisition,
     IAudioPreprocessor preprocessor,
+    IEnumerable<IDetectionSignalProvider> signalProviders,
     ILogger<AnalysisPipeline> logger) : IAnalysisPipeline
 {
-    /// <summary>
-    /// Stand-in until detection signals (Phase 3) and aggregation (Phase 4) exist: with no
-    /// signals the only honest verdict is inconclusive, so jobs still reach a terminal state.
-    /// </summary>
-    private static readonly AnalysisResult NoSignalsResult = new(
-        AnalysisVerdict.Inconclusive,
-        AiProbability: 0.5,
-        Confidence: 0,
-        Signals: [],
-        Explanation: "No detection signals are available yet, so no verdict could be reached.");
 
     public async Task RunAsync(AnalysisJobEntity job, CancellationToken cancellationToken = default)
     {
@@ -44,7 +35,10 @@ public sealed class AnalysisPipeline(
                 preprocessed.SampleRate,
                 preprocessed.Channels);
 
-            job.Result = NoSignalsResult;
+            await AdvanceAsync(job, AnalysisStatus.Analyzing, cancellationToken);
+            var signals = await CollectSignalsAsync(preprocessed, acquired.Track, cancellationToken);
+
+            job.Result = UnaggregatedResult(signals);
             job.Status = AnalysisStatus.Completed;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -79,6 +73,45 @@ public sealed class AnalysisPipeline(
 
         return interrupted.Count;
     }
+
+    /// <summary>
+    /// Runs every provider; one that throws is logged and left out, so a single broken or
+    /// unconfigured detector costs that signal rather than the whole analysis.
+    /// </summary>
+    private async Task<List<Signal>> CollectSignalsAsync(
+        PreprocessedAudio audio,
+        Track track,
+        CancellationToken cancellationToken)
+    {
+        var signals = new List<Signal>();
+
+        foreach (var provider in signalProviders)
+        {
+            try
+            {
+                signals.Add(await provider.DetectAsync(audio, track, cancellationToken));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                logger.LogWarning(ex, "Signal provider {Provider} failed; continuing without it.", provider.Name);
+            }
+        }
+
+        return signals;
+    }
+
+    /// <summary>
+    /// Stand-in until aggregation (Phase 4) exists: signals are kept for display, but the
+    /// verdict stays inconclusive rather than guessing how to weigh them.
+    /// </summary>
+    private static AnalysisResult UnaggregatedResult(IReadOnlyList<Signal> signals) => new(
+        AnalysisVerdict.Inconclusive,
+        AiProbability: 0.5,
+        Confidence: 0,
+        signals,
+        Explanation: signals.Count == 0
+            ? "No detection signals are available, so no verdict could be reached."
+            : "Signals were collected, but combining them into a verdict is not implemented yet.");
 
     private async Task AdvanceAsync(AnalysisJobEntity job, AnalysisStatus status, CancellationToken cancellationToken)
     {
