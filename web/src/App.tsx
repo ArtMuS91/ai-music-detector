@@ -42,6 +42,8 @@ function App() {
   const [submitting, setSubmitting] = useState(false);
   const jobIdRef = useRef<string | null>(null);
 
+  const isOnline = apiStatus === 'online';
+
   useEffect(() => {
     checkHealth().then((ok) => setApiStatus(ok ? 'online' : 'offline'));
   }, []);
@@ -84,6 +86,7 @@ function App() {
   }
 
   const inProgress = job !== null && !TERMINAL_STATUSES.includes(job.status);
+  const canSubmit = url !== '' && !submitting && isOnline;
 
   return (
     <Container maxWidth="sm" sx={{ py: 8 }}>
@@ -99,17 +102,17 @@ function App() {
 
         <TextField
           label="YouTube URL"
-          placeholder="https://www.youtube.com/watch?v=..."
+          placeholder="https://music.youtube.com/watch?v="
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && url && !submitting) {
+            if (e.key === 'Enter' && canSubmit) {
               handleSubmit();
             }
           }}
           fullWidth
         />
-        <Button variant="contained" disabled={!url || submitting} onClick={handleSubmit}>
+        <Button variant="contained" disabled={!canSubmit} onClick={handleSubmit}>
           Analyze
         </Button>
 

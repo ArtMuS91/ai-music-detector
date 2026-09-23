@@ -42,9 +42,8 @@ Planned but not yet present: `ml/` (Python ML models).
 - Dev server: `npm run dev` — serves on `http://localhost:5173`
 - Build (typecheck + bundle): `npm run build`
 - Lint: `npm run lint` (oxlint)
+- Test: `npm test` (Vitest + React Testing Library on jsdom, single run); `npm run test:watch` for watch mode
 - Preview production build: `npm run preview`
-
-No test runner is configured yet for the web app.
 
 ## Architecture notes
 
@@ -64,4 +63,6 @@ No test runner is configured yet for the web app.
 ## Web conventions
 
 - TypeScript models/types live in `web/src/models/` (one file per type, e.g. `Track.ts`, `AnalysisJob.ts`), separate from the components and `api.ts` that use them.
+- Tests sit next to the file they cover (`App.test.tsx`, `api.test.ts`); shared test setup and helpers live in `web/src/test/`. Tests never hit a real API — stub `fetch` with `mockApi` from `src/test/mockApi.ts`, which routes by `"METHOD /path"` and throws on any request it wasn't told about. Query elements the way a user finds them (role + accessible name) rather than by class or test id. Polling is tested with Vitest fake timers (`vi.useFakeTimers({ shouldAdvanceTime: true })` plus `userEvent.setup({ advanceTimers: vi.advanceTimersByTime })`).
+- The web job in CI (`.github/workflows/ci.yml`) runs lint, then tests, then build; a failing test fails the job.
 - Style: always terminate statements with semicolons. Control-flow bodies (`if`/`else`/`for`/etc.) always use braces, even for one-liners — never `if (x) return y;`. A `return` (or any statement) inside a block goes on its own line.
