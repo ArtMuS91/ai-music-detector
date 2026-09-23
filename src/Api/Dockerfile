@@ -20,6 +20,11 @@ RUN dotnet publish src/Api/Api.csproj --no-restore --configuration Release --out
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 
+# ffmpeg decodes whatever container/codec yt-dlp downloaded during preprocessing.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 # Standalone yt-dlp build has no Python dependency, keeping the runtime image small.
 ADD https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux /usr/local/bin/yt-dlp
 RUN chmod a+rx /usr/local/bin/yt-dlp

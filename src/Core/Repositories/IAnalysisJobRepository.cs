@@ -13,4 +13,7 @@ public interface IAnalysisJobRepository
 
     /// <summary>Claims the oldest pending job for processing, or null when the queue is empty.</summary>
     Task<AnalysisJobEntity?> ClaimNextPendingAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Jobs that were claimed but have not reached <c>Completed</c> or <c>Failed</c>.</summary>
+    Task<IReadOnlyList<AnalysisJobEntity>> ListInProgressAsync(CancellationToken cancellationToken = default);
 }

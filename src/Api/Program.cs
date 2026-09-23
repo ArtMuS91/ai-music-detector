@@ -13,7 +13,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddAnalysis();
-builder.Services.AddHostedService<AcquisitionWorker>();
+builder.Services.AddHostedService<AnalysisWorker>();
 
 const string webClientCorsPolicy = "WebClient";
 builder.Services.AddCors(options =>

@@ -18,10 +18,12 @@ public static class InfrastructureServiceCollectionExtensions
                 .UseSnakeCaseNamingConvention());
 
         services.Configure<YtDlpOptions>(configuration.GetSection(YtDlpOptions.SectionName));
+        services.Configure<FfmpegOptions>(configuration.GetSection(FfmpegOptions.SectionName));
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IAnalysisJobRepository, EfAnalysisJobRepository>();
         services.AddSingleton<IAudioAcquisitionService, YtDlpAudioAcquisitionService>();
+        services.AddSingleton<IAudioPreprocessor, FfmpegAudioPreprocessor>();
 
         return services;
     }

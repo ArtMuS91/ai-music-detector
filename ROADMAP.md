@@ -23,10 +23,10 @@ Phases are ordered by dependency, so each one should leave the project in a runn
 
 ## Phase 2 — Preprocessing and background processing
 
-- Preprocessing pipeline in `Analysis`: resample, downmix to mono, trim/segment
-- Extend `AcquisitionWorker` (added in Phase 1 so status polling had something to show) into the full pipeline: jobs currently stop at `Preprocessing` with audio downloaded and nothing to consume it
-- Decide where a job that dies mid-`Acquiring` gets reclaimed — right now a worker shutdown strands it in that status
-- Delete the acquired/preprocessed audio file(s) once a job reaches a terminal state (`Completed` or `Failed`) — nothing currently cleans up `AnalysisJob.AcquiredAudioPath`, so temp storage grows unbounded
+- Preprocessing via ffmpeg (`FfmpegAudioPreprocessor` in `Infrastructure`, since it shells out to an external tool like yt-dlp): decode → resample (44.1 kHz) → downmix to mono → trim to a 3-minute window from the middle of the track, written as 16-bit PCM WAV. Splitting into model-sized segments is left to Phase 3, where each detector knows its own input length
+- `AnalysisPipeline` in `Analysis` runs a claimed job through every stage to `Completed`/`Failed`; `AcquisitionWorker` became `AnalysisWorker`, a thin `IHostedService` in the API that claims one job at a time (no separate worker project — the MVP processes one track at a time). With no detectors yet, jobs complete as `Inconclusive`
+- Interrupted jobs are requeued at worker startup — safe only because there is a single sequential worker
+- Acquired and preprocessed audio is deleted when a job reaches `Completed` or `Failed`, or when an interrupted job is requeued
 
 ## Phase 3 — ML detection service
 
