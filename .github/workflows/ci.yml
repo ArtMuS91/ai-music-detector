@@ -24,6 +24,9 @@ jobs:
       - name: Build
         run: dotnet build AiMusicDetector.slnx --no-restore --configuration Release
 
+      - name: Test
+        run: dotnet test AiMusicDetector.slnx --no-build --configuration Release
+
   web:
     name: Web build
     runs-on: ubuntu-latest
