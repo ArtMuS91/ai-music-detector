@@ -18,13 +18,15 @@ Phases are ordered by dependency, so each one should leave the project in a runn
 - `yt-dlp`-backed `IAudioAcquisitionService` in `Infrastructure`: YouTube/YouTube Music URL → audio-only file
 - API endpoints: `POST /api/analyze` (validate URL, create job, return id) and `GET /api/analyze/{id}` (status/result polling)
 - PostgreSQL + EF Core wiring in `Infrastructure` for the job store
-- `docker-compose.yml` (API, web, Postgres) — first phase that needs a real local dependency
+- `docker-compose.yml` — Postgres, plus the API containerized with yt-dlp bundled (`src/Api/Dockerfile`) so `docker compose up` needs nothing installed on the host. Web still runs via `npm run dev`; containerizing it waits until there is something to deploy
 - Web: URL input form → submit → poll status. No visualization yet, just prove the round trip
 
 ## Phase 2 — Preprocessing and background processing
 
 - Preprocessing pipeline in `Analysis`: resample, downmix to mono, trim/segment
-- Background worker (`IHostedService` or separate worker project) that dequeues pending jobs and advances them through preprocessing
+- Extend `AcquisitionWorker` (added in Phase 1 so status polling had something to show) into the full pipeline: jobs currently stop at `Preprocessing` with audio downloaded and nothing to consume it
+- Decide where a job that dies mid-`Acquiring` gets reclaimed — right now a worker shutdown strands it in that status
+- Delete the acquired/preprocessed audio file(s) once a job reaches a terminal state (`Completed` or `Failed`) — nothing currently cleans up `AnalysisJob.AcquiredAudioPath`, so temp storage grows unbounded
 
 ## Phase 3 — ML detection service
 

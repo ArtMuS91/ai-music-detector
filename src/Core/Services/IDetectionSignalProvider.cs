@@ -1,6 +1,6 @@
 using Core.Models;
 
-namespace Core.Abstractions;
+namespace Core.Services;
 
 /// <summary>
 /// One independent detection signal. Providers run side by side so a weak or
