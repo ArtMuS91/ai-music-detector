@@ -1,4 +1,4 @@
-namespace Core.Abstractions;
+namespace Core.Services;
 
 public sealed record PreprocessedAudio(
     string FilePath,

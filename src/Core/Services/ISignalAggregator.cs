@@ -1,6 +1,6 @@
 using Core.Models;
 
-namespace Core.Abstractions;
+namespace Core.Services;
 
 public interface ISignalAggregator
 {

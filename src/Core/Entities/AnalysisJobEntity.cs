@@ -1,6 +1,8 @@
-namespace Core.Models;
+using Core.Models;
 
-public sealed class AnalysisJob
+namespace Core.Entities;
+
+public sealed class AnalysisJobEntity
 {
     public required Guid Id { get; init; }
     public required string SourceUrl { get; init; }
@@ -8,6 +10,7 @@ public sealed class AnalysisJob
     public AnalysisStatus Status { get; set; } = AnalysisStatus.Pending;
     public DateTimeOffset UpdatedAt { get; set; }
     public Track? Track { get; set; }
+    public string? AcquiredAudioPath { get; set; }
     public AnalysisResult? Result { get; set; }
     public string? FailureReason { get; set; }
 }
