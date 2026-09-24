@@ -49,6 +49,12 @@ Planned but not yet present: `ml/` (Python ML models).
 - Test: `npm test` (Vitest + React Testing Library on jsdom, single run); `npm run test:watch` for watch mode
 - Preview production build: `npm run preview`
 
+### Pre-commit AI review
+- `.githooks/pre-commit` runs the `code-reviewer` agent (`.claude/agents/code-reviewer.md`) headlessly over the staged diff. Enable once per clone: `git config core.hooksPath .githooks`.
+- The agent's last output line is `VERDICT: PASS|WARN|FAIL`; only `FAIL` (a Critical finding) blocks the commit. `AI_REVIEW_STRICT=1` also blocks on `WARN`; `SKIP_AI_REVIEW=1` or `git commit --no-verify` skips the review; `AI_REVIEW_TIMEOUT` (seconds, default 900) bounds it.
+- Uses `claude` from `PATH`, else `CLAUDE_BIN`, else the binary bundled with the VS Code extension. If none is found, or the run errors or times out, the commit is allowed — the review never blocks on its own failure.
+- To review without committing, ask Claude Code to use the `code-reviewer` agent (defaults to all uncommitted changes).
+
 ## Architecture notes
 
 - The API is a minimal-API project (no MVC controllers) — endpoints are registered directly in `src/Api/Program.cs` via `app.MapGet`/etc.
