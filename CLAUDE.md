@@ -55,6 +55,10 @@ Planned but not yet present: `ml/` (Python ML models).
 - Uses `claude` from `PATH`, else `CLAUDE_BIN`, else the binary bundled with the VS Code extension. If none is found, or the run errors or times out, the commit is allowed — the review never blocks on its own failure.
 - To review without committing, ask Claude Code to use the `code-reviewer` agent (defaults to all uncommitted changes).
 
+### Architecture reports
+- Ask Claude Code to "run the architecture-reporter agent" (`.claude/agents/architecture-reporter.md`). It's manual only, not part of any hook.
+- Each run writes a new `docs/architecture/architecture-YYYY-MM-DD_HHmmss.md`: a 3-tier view (presentation / application / data & integration) with Mermaid diagrams (tier overview, job state machine), detection signals, configuration & deployment, a "changes since previous report" section, and roadmap position. Earlier reports are never edited. Commit them so git keeps the history of how the architecture changed.
+
 ## Architecture notes
 
 - The API is a minimal-API project (no MVC controllers) — endpoints are registered directly in `src/Api/Program.cs` via `app.MapGet`/etc.
