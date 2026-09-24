@@ -1,3 +1,4 @@
+using System.Threading.RateLimiting;
 using Analysis;
 using Api.BackgroundServices;
 using Api.Endpoints;
@@ -14,6 +15,20 @@ builder.Services.AddProblemDetails();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddAnalysis();
 builder.Services.AddHostedService<AnalysisWorker>();
+
+// Every submission costs a full download plus several Groq calls, so cap how often one client can queue work.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(AnalysisEndpoints.SubmitRateLimitPolicy, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+            }));
+});
 
 const string webClientCorsPolicy = "WebClient";
 builder.Services.AddCors(options =>
@@ -42,6 +57,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors(webClientCorsPolicy);
+app.UseRateLimiter();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }))
     .WithName("GetHealth");

@@ -27,37 +27,91 @@ public sealed class YtDlpAudioAcquisitionService(
             throw new AudioAcquisitionException($"'{sourceUrl}' is not a YouTube video link.");
         }
 
-        var workingDirectory = _options.WorkingDirectory
-            ?? Path.Combine(Path.GetTempPath(), "ai-music-detector", "audio");
-        Directory.CreateDirectory(workingDirectory);
+        // Each download gets its own folder, so a failed or cancelled run's partial files
+        // (.part, .ytdl) can be removed wholesale, and no stale file from an earlier job can
+        // be mistaken for this one's output.
+        var downloadDirectory = Path.Combine(WorkingDirectory, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(downloadDirectory);
 
-        var result = await ExternalProcess.RunAsync(
-            _options.ExecutablePath,
-            BuildArguments(workingDirectory, url),
-            _options.Timeout,
-            logger,
-            cancellationToken);
-
-        if (result.ExitCode != 0)
+        try
         {
-            logger.LogWarning("yt-dlp exited with {ExitCode} for {VideoId}: {Error}", result.ExitCode, url.VideoId, result.Stderr);
-            throw new AudioAcquisitionException(
-                $"yt-dlp failed (exit code {result.ExitCode}): {ExternalProcess.Summarize(result.Stderr)}");
+            var result = await ExternalProcess.RunAsync(
+                _options.ExecutablePath,
+                BuildArguments(downloadDirectory, url),
+                _options.Timeout,
+                logger,
+                cancellationToken);
+
+            if (result.ExitCode != 0)
+            {
+                logger.LogWarning("yt-dlp exited with {ExitCode} for {VideoId}: {Error}", result.ExitCode, url.VideoId, result.Stderr);
+                throw new AudioAcquisitionException(
+                    $"yt-dlp failed (exit code {result.ExitCode}): {ExternalProcess.Summarize(result.Stderr)}");
+            }
+
+            // yt-dlp exits successfully without downloading when --match-filter or --max-filesize rejects the video.
+            var filePath = Directory.EnumerateFiles(downloadDirectory, $"{url.VideoId}.*").FirstOrDefault()
+                ?? throw new UserFacingException(
+                    $"The video was skipped: live streams, videos longer than {_options.MaxDuration.TotalMinutes:0} minutes "
+                    + $"and audio larger than {_options.MaxFileSizeMegabytes} MB are not analyzed.");
+
+            return new AcquiredAudio(filePath, ReadTrackMetadata(result.Stdout, url));
         }
-
-        var filePath = Directory.EnumerateFiles(workingDirectory, $"{url.VideoId}.*").FirstOrDefault()
-            ?? throw new AudioAcquisitionException("yt-dlp reported success but produced no audio file.");
-
-        return new AcquiredAudio(filePath, ReadTrackMetadata(result.Stdout, url));
+        catch
+        {
+            TryDeleteDirectory(downloadDirectory);
+            throw;
+        }
     }
 
-    private static IEnumerable<string> BuildArguments(string workingDirectory, YouTubeUrl url) =>
+    public void DeleteDownload(string filePath)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(filePath));
+
+        if (directory is not null && IsDownloadDirectory(directory))
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+        else
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    private string WorkingDirectory => Path.GetFullPath(
+        _options.WorkingDirectory ?? Path.Combine(Path.GetTempPath(), "ai-music-detector", "audio"));
+
+    /// <summary>
+    /// Only a per-download folder directly under the working directory is removed whole — never
+    /// the working directory itself (paths saved before downloads had their own folder).
+    /// </summary>
+    private bool IsDownloadDirectory(string directory)
+        => string.Equals(
+            Path.TrimEndingDirectorySeparator(Path.GetDirectoryName(directory) ?? ""),
+            Path.TrimEndingDirectorySeparator(WorkingDirectory),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    private void TryDeleteDirectory(string directory)
+    {
+        try
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Could not delete download folder {Directory}.", directory);
+        }
+    }
+
+    private IEnumerable<string> BuildArguments(string downloadDirectory, YouTubeUrl url) =>
     [
         "--no-playlist",
         "--no-progress",
         "--quiet",
         "--format", "bestaudio",
-        "--output", Path.Combine(workingDirectory, "%(id)s.%(ext)s"),
+        "--match-filter", $"!is_live & duration <= {(int)_options.MaxDuration.TotalSeconds}",
+        "--max-filesize", $"{_options.MaxFileSizeMegabytes}M",
+        "--output", Path.Combine(downloadDirectory, "%(id)s.%(ext)s"),
         "--print-json",
         url.CanonicalUrl,
     ];
