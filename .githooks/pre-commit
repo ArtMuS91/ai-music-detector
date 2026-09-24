@@ -1,0 +1,94 @@
+#!/bin/sh
+# AI code review of the staged changes, using the code-reviewer agent in
+# .claude/agents/code-reviewer.md. Enable once per clone with:
+#   git config core.hooksPath .githooks
+#
+# Environment:
+#   SKIP_AI_REVIEW=1      skip the review for this commit (or: git commit --no-verify)
+#   AI_REVIEW_STRICT=1    also block on VERDICT: WARN (default: only FAIL blocks)
+#   AI_REVIEW_TIMEOUT=900 seconds before the review is abandoned (commit is allowed)
+#   CLAUDE_BIN=<path>     claude executable to use
+
+if [ "${SKIP_AI_REVIEW:-0}" = "1" ]; then
+    echo "[ai-review] Skipped (SKIP_AI_REVIEW=1)."
+    exit 0
+fi
+
+if git diff --cached --quiet; then
+    exit 0
+fi
+
+# Resolve the claude CLI: explicit override, then PATH, then the binary bundled
+# with the newest installed VS Code extension.
+claude_bin="${CLAUDE_BIN:-}"
+if [ -z "$claude_bin" ] && command -v claude >/dev/null 2>&1; then
+    claude_bin="claude"
+fi
+if [ -z "$claude_bin" ]; then
+    claude_bin=$(ls -d "$HOME"/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude* 2>/dev/null | sort -V | tail -n 1)
+fi
+if [ -z "$claude_bin" ]; then
+    echo "[ai-review] claude CLI not found (set CLAUDE_BIN) - skipping review." >&2
+    exit 0
+fi
+
+# GNU timeout ships with Git for Windows and Linux; macOS has it as gtimeout
+# (coreutils) or not at all, in which case the review runs unbounded.
+timeout_cmd=""
+if command -v timeout >/dev/null 2>&1; then
+    timeout_cmd="timeout ${AI_REVIEW_TIMEOUT:-900}"
+elif command -v gtimeout >/dev/null 2>&1; then
+    timeout_cmd="gtimeout ${AI_REVIEW_TIMEOUT:-900}"
+fi
+
+output_file=$(mktemp)
+status_file=$(mktemp)
+trap 'rm -f "$output_file" "$status_file"' EXIT
+
+echo "[ai-review] Reviewing staged changes with the code-reviewer agent..."
+
+# The prompt goes in on stdin because --allowedTools is variadic and would
+# swallow a trailing prompt argument. The exit code is captured separately
+# since a POSIX pipeline only reports tee's.
+{
+    echo "Review the staged changes only (git diff --cached) - this is a pre-commit check." |
+        $timeout_cmd "$claude_bin" -p \
+            --agent code-reviewer \
+            --allowedTools "Read" "Grep" "Glob" \
+                "Bash(git diff:*)" "Bash(git status:*)" "Bash(git log:*)" "Bash(git show:*)" \
+                "Bash(dotnet build:*)" "Bash(dotnet test:*)" "Bash(dotnet list package:*)" \
+                "Bash(npm run lint:*)" "Bash(npm audit:*)" "Bash(npm exec --prefix web:*)"
+    echo $? > "$status_file"
+} | tee "$output_file"
+status=$(cat "$status_file")
+
+if [ "${status:-1}" -ne 0 ]; then
+    echo "[ai-review] Review did not complete (exit $status) - allowing commit." >&2
+    exit 0
+fi
+
+# Only the final non-empty line counts, so a verdict string quoted inside the
+# review body (or a truncated run) can't block or pass the commit.
+verdict=$(tr -d '\r' < "$output_file" | grep -v '^[[:space:]]*$' | tail -n 1 | grep -Ex 'VERDICT: (PASS|WARN|FAIL)')
+
+case "$verdict" in
+    "VERDICT: FAIL")
+        echo "[ai-review] Critical findings - commit blocked. Fix them, or bypass with: git commit --no-verify" >&2
+        exit 1
+        ;;
+    "VERDICT: WARN")
+        if [ "${AI_REVIEW_STRICT:-0}" = "1" ]; then
+            echo "[ai-review] Findings reported and AI_REVIEW_STRICT=1 - commit blocked." >&2
+            exit 1
+        fi
+        echo "[ai-review] Findings reported (non-critical) - commit allowed."
+        ;;
+    "VERDICT: PASS")
+        echo "[ai-review] Passed."
+        ;;
+    *)
+        echo "[ai-review] No verdict found in review output - allowing commit." >&2
+        ;;
+esac
+
+exit 0

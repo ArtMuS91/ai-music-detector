@@ -11,4 +11,10 @@ public sealed class YtDlpOptions
     public string? WorkingDirectory { get; set; }
 
     public TimeSpan Timeout { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>Longer videos (and live streams) are skipped instead of downloaded.</summary>
+    public TimeSpan MaxDuration { get; set; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>Downloads larger than this are aborted.</summary>
+    public int MaxFileSizeMegabytes { get; set; } = 100;
 }

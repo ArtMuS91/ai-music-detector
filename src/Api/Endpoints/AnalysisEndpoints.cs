@@ -5,13 +5,16 @@ namespace Api.Endpoints;
 
 public static class AnalysisEndpoints
 {
+    public const string SubmitRateLimitPolicy = "SubmitAnalysis";
+
     public static IEndpointRouteBuilder MapAnalysisEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/analyze").WithTags("Analysis");
 
         group.MapPost("/", SubmitAsync)
             .WithName("SubmitAnalysis")
-            .WithSummary("Queues a YouTube / YouTube Music track for analysis.");
+            .WithSummary("Queues a YouTube / YouTube Music track for analysis.")
+            .RequireRateLimiting(SubmitRateLimitPolicy);
 
         group.MapGet("/{id:guid}", GetAsync)
             .WithName("GetAnalysis")

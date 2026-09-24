@@ -82,7 +82,7 @@ public sealed class AnalysisPipelineTests : IDisposable
     [Fact]
     public async Task AcquisitionFailure_FailsTheJobWithTheReason()
     {
-        _acquisition.Failure = new InvalidOperationException("video unavailable");
+        _acquisition.Failure = new UserFacingException("video unavailable");
         var job = NewJob(AnalysisStatus.Acquiring);
 
         await _pipeline.RunAsync(job);
@@ -193,6 +193,8 @@ public sealed class AnalysisPipelineTests : IDisposable
             await File.WriteAllTextAsync(LastFilePath, "audio", cancellationToken);
             return new AcquiredAudio(LastFilePath, new Track(sourceUrl, Title: "Song"));
         }
+
+        public void DeleteDownload(string filePath) => File.Delete(filePath);
     }
 
     private sealed class FakePreprocessor : IAudioPreprocessor

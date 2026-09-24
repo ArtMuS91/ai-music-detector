@@ -49,12 +49,24 @@ public sealed class AnalysisPipeline(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Job {JobId} failed during {Status}.", job.Id, job.Status);
-            job.Status = AnalysisStatus.Failed;
-            job.FailureReason = ex.Message;
+            Fail(job, ex is UserFacingException ? ex.Message : StageFailureReason(job.Status));
         }
 
         DeleteAudioFiles(job);
-        await jobs.UpdateAsync(job, cancellationToken);
+
+        try
+        {
+            await jobs.UpdateAsync(job, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            // Without a terminal status the client would poll forever, so fall back to the
+            // smallest possible failure record rather than leave the job in progress.
+            logger.LogError(ex, "Could not save the outcome of job {JobId}; recording it as failed.", job.Id);
+            job.Result = null;
+            Fail(job, "The analysis finished, but its result could not be saved.");
+            await jobs.UpdateAsync(job, cancellationToken);
+        }
     }
 
     public async Task<int> RecoverInterruptedAsync(CancellationToken cancellationToken = default)
@@ -119,15 +131,33 @@ public sealed class AnalysisPipeline(
         await jobs.UpdateAsync(job, cancellationToken);
     }
 
+    private static void Fail(AnalysisJobEntity job, string reason)
+    {
+        job.Status = AnalysisStatus.Failed;
+        job.FailureReason = reason.Length <= AnalysisJobEntity.FailureReasonMaxLength
+            ? reason
+            : reason[..AnalysisJobEntity.FailureReasonMaxLength];
+    }
+
+    /// <summary>What the user sees for an unexpected failure; the details only go to the log.</summary>
+    private static string StageFailureReason(AnalysisStatus stage) => stage switch
+    {
+        AnalysisStatus.Acquiring =>
+            "Could not download the track's audio. The video may be private, age-restricted, region-locked or no longer available.",
+        AnalysisStatus.Preprocessing => "Could not decode the track's audio.",
+        _ => "The analysis failed unexpectedly.",
+    };
+
     /// <summary>Audio is only needed while a job is being worked on; nothing reads it after that.</summary>
     private void DeleteAudioFiles(AnalysisJobEntity job)
     {
-        job.AcquiredAudioPath = TryDelete(job.AcquiredAudioPath);
-        job.PreprocessedAudioPath = TryDelete(job.PreprocessedAudioPath);
+        // Preprocessed output first: it can live inside the download folder DeleteDownload removes.
+        job.PreprocessedAudioPath = TryDelete(job.PreprocessedAudioPath, File.Delete);
+        job.AcquiredAudioPath = TryDelete(job.AcquiredAudioPath, acquisition.DeleteDownload);
     }
 
     /// <returns>Null once the file is gone, or the path again if it could not be deleted.</returns>
-    private string? TryDelete(string? path)
+    private string? TryDelete(string? path, Action<string> delete)
     {
         if (path is null)
         {
@@ -136,7 +166,12 @@ public sealed class AnalysisPipeline(
 
         try
         {
-            File.Delete(path);
+            delete(path);
+            return null;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            // Its folder was already removed along with it.
             return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
