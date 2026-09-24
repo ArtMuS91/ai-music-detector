@@ -57,7 +57,7 @@ Planned but not yet present: `ml/` (Python ML models).
 
 ### Architecture reports
 - Ask Claude Code to "run the architecture-reporter agent" (`.claude/agents/architecture-reporter.md`). It's manual only, not part of any hook.
-- Each run writes a new `docs/architecture/architecture-YYYY-MM-DD_HHmmss.md`: a 3-tier view (presentation / application / data & integration) with Mermaid diagrams (tier overview, job state machine), detection signals, configuration & deployment, a "changes since previous report" section, and roadmap position. Earlier reports are never edited. Commit them so git keeps the history of how the architecture changed.
+- Each run writes a new self-contained `docs/architecture/architecture-YYYY-MM-DD_HHmmss.html` (open it in a browser; Mermaid loads from a CDN): a 3-tier view (presentation / application / data & integration) with styled Mermaid diagrams (tier overview, job state machine, deployment), detection signals, and roadmap position. Earlier reports are never edited or compared against. Commit them so git keeps the history of how the architecture changed.
 
 ## Architecture notes
 
