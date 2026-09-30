@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -44,6 +45,16 @@ def test_undecodable_upload_is_422():
 
     assert response.status_code == 422
     assert "decode" in response.json()["detail"]
+
+
+def test_oversized_upload_is_rejected_before_decoding(monkeypatch):
+    monkeypatch.setattr("app.audio.MAX_SAMPLES", 44_100)
+    monkeypatch.setattr("app.audio.sf.read", lambda *args, **kwargs: pytest.fail("decoded an oversized upload"))
+
+    response = client.post("/detect/spectral", files=upload(wav_bytes(noise(seconds=2))))
+
+    assert response.status_code == 422
+    assert "too long" in response.json()["detail"]
 
 
 def test_missing_upload_is_422():

@@ -40,7 +40,8 @@ services:
       context: ml
     container_name: aimusicdetector-ml
     ports:
-      - "8000:8000"
+      # Localhost only: the API reaches it as ml:8000 inside compose; this is just for dotnet run and curl.
+      - "127.0.0.1:8000:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 5s
