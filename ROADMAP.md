@@ -32,18 +32,16 @@ Phases are ordered by dependency, so each one should leave the project in a runn
 
 - ✅ `ml/` Python project (FastAPI) exposing `POST /detect/{detector}` over the uploaded preprocessed WAV — one endpoint per detector, so each stays an independent signal; `GET /health` lists detectors
 - Multiple independent detection signals rather than a single classifier, added incrementally:
-  - Spectral anomalies — ✅ first cut: `spectral` detector looks for the evenly spaced spectral peaks neural decoders leave behind; thresholds are uncalibrated placeholders, so its weight is capped at 0.2 until it is tuned on labelled tracks
-  - Vocal synthesis indicators (Hugging Face audio deepfake models)
-  - Generative-audio artifacts
-  - Metadata heuristics (title/channel patterns, upload metadata)
+  - ✅ Generative-audio artifacts — `fakeprint`: pretrained logistic regression (`lofcz/ai-music-detector`, MIT, trained on Suno <= 5 / Udio <= 1.5) over the "fakeprint" of Afchar et al. (ISMIR 2025). Features are ported to numpy (no PyTorch) and checked against torchaudio. On 14 YouTube tracks (7 known AI, 7 human) it separated every one (AI 1.00, human <= 0.005), weight 0.8. It replaced a hand-tuned spectral-peak detector that could barely tell the two apart on the same tracks
+  - ✅ Metadata heuristics: `MetadataHeuristicsSignalProvider` (in `Analysis`) — pre-2023 upload date (strongly human), AI tools/disclosures named in title/channel/tags/description (AI), "no AI"-style claims (weakly human). `Track` now carries the video description and tags
   - ✅ Web research (done early, alongside Phase 2): `GroqWebResearchSignalProvider` asks a Groq GPT-OSS model with `browser_search` whether the track/artist is publicly known to be AI-generated, returning a score, a confidence-based weight, and evidence links verified against the actual search results. Stored in the result's signals; the verdict stays `Inconclusive` until Phase 4
-- Vocal/transcription analysis via Whisper
 - ✅ `MlDetectionSignalProvider` (in `Infrastructure`, alongside the other external integrations) calls the `ml/` service over HTTP, one provider per id in `MlService:Detectors`; the service is in `docker-compose.yml` and CI
 
 ## Phase 4 — Aggregation and explanation
 
-- `ISignalAggregator` in `Analysis`: combine signal scores into verdict + confidence (start with weighted rules, not a learned meta-model)
+- `ISignalAggregator` in `Analysis`: combine signal scores into verdict + confidence (start with weighted rules, not a learned meta-model). Signals can disagree confidently: on the Phase 3 check, web research called an AI act (Aventhis) human at weight 0.8 while `fakeprint` scored it 1.00, so a strong audio signal should be able to outvote it
 - AI analysis agent (Groq API) turning aggregated signals into a human-readable explanation; MCP tools and RAG over detection knowledge if justification quality needs it
+- Lyrics transcription via Whisper, as input for the agent's explanation rather than a detection signal of its own
 
 ## Phase 5 — Result UI
 

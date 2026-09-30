@@ -28,23 +28,23 @@ public sealed class MlDetectionSignalProviderTests : IDisposable
     public async Task Response_BecomesASignal()
     {
         var provider = CreateProvider(new StubHandler(
-            """{"name":"Spectral artifacts","score":0.8,"weight":0.2,"detail":"Peaks every 86 Hz."}"""));
+            """{"name":"Generator fingerprint","score":0.8,"weight":0.2,"detail":"Matches Suno."}"""));
 
         var signal = await provider.DetectAsync(_audio, Track);
 
-        Assert.Equal(new Signal("Spectral artifacts", 0.8, 0.2, "Peaks every 86 Hz."), signal);
+        Assert.Equal(new Signal("Generator fingerprint", 0.8, 0.2, "Matches Suno."), signal);
     }
 
     [Fact]
     public async Task UploadsTheAudioFile_ToTheDetectorsEndpoint()
     {
         var handler = new StubHandler("""{"name":"x","score":0.5,"weight":0}""");
-        var provider = CreateProvider(handler, detectorId: "spectral");
+        var provider = CreateProvider(handler, detectorId: "fakeprint");
 
         await provider.DetectAsync(_audio, Track);
 
         Assert.Equal(HttpMethod.Post, handler.Request!.Method);
-        Assert.Equal("http://ml.test/detect/spectral", handler.Request.RequestUri!.ToString());
+        Assert.Equal("http://ml.test/detect/fakeprint", handler.Request.RequestUri!.ToString());
         Assert.Contains("name=audio", handler.Body);
         Assert.Contains("\u0001\u0002\u0003\u0004", handler.Body);
     }
@@ -63,11 +63,11 @@ public sealed class MlDetectionSignalProviderTests : IDisposable
     [Fact]
     public async Task MissingName_FallsBackToTheDetectorId()
     {
-        var provider = CreateProvider(new StubHandler("""{"score":0.5,"weight":0.1}"""), detectorId: "spectral");
+        var provider = CreateProvider(new StubHandler("""{"score":0.5,"weight":0.1}"""), detectorId: "fakeprint");
 
         var signal = await provider.DetectAsync(_audio, Track);
 
-        Assert.Equal("spectral", signal.Name);
+        Assert.Equal("fakeprint", signal.Name);
     }
 
     [Theory]
@@ -87,7 +87,7 @@ public sealed class MlDetectionSignalProviderTests : IDisposable
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["MlService:Detectors:0"] = "spectral",
+                ["MlService:Detectors:0"] = "fakeprint",
                 ["MlService:Detectors:1"] = "vocals",
             })
             .Build();
@@ -98,10 +98,10 @@ public sealed class MlDetectionSignalProviderTests : IDisposable
 
         var names = services.GetServices<IDetectionSignalProvider>().Select(p => p.Name);
 
-        Assert.Equal(["Web research", "ML detector 'spectral'", "ML detector 'vocals'"], names);
+        Assert.Equal(["Web research", "ML detector 'fakeprint'", "ML detector 'vocals'"], names);
     }
 
-    private static MlDetectionSignalProvider CreateProvider(StubHandler handler, string detectorId = "spectral")
+    private static MlDetectionSignalProvider CreateProvider(StubHandler handler, string detectorId = "fakeprint")
         => new(
             new HttpClient(handler) { BaseAddress = new Uri("http://ml.test/") },
             detectorId,

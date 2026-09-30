@@ -139,7 +139,9 @@ public sealed class YtDlpAudioAcquisitionService(
                 Duration: root.TryGetProperty("duration", out var duration) && duration.TryGetDouble(out var seconds)
                     ? TimeSpan.FromSeconds(seconds)
                     : null,
-                PublishedAt: ParseUploadDate(GetString(root, "upload_date")));
+                PublishedAt: ParseUploadDate(GetString(root, "upload_date")),
+                Description: GetString(root, "description"),
+                Tags: GetStrings(root, "tags"));
         }
         catch (JsonException ex)
         {
@@ -151,6 +153,14 @@ public sealed class YtDlpAudioAcquisitionService(
     private static string? GetString(JsonElement root, string property)
         => root.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
+            : null;
+
+    private static IReadOnlyList<string>? GetStrings(JsonElement root, string property)
+        => root.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Array
+            ? value.EnumerateArray()
+                .Where(item => item.ValueKind == JsonValueKind.String)
+                .Select(item => item.GetString()!)
+                .ToList()
             : null;
 
     private static DateTimeOffset? ParseUploadDate(string? uploadDate)

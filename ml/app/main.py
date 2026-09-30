@@ -3,9 +3,9 @@ from pydantic import BaseModel
 
 from app.audio import InvalidAudioError, load_clip
 from app.detectors.base import Detector
-from app.detectors.spectral import SpectralArtifactDetector
+from app.detectors.fakeprint import FakeprintDetector
 
-DETECTORS: dict[str, Detector] = {detector.id: detector for detector in [SpectralArtifactDetector()]}
+DETECTORS: dict[str, Detector] = {detector.id: detector for detector in [FakeprintDetector()]}
 
 app = FastAPI(title="AI Music Detector ML service")
 
