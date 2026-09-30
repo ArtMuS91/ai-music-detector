@@ -6,4 +6,6 @@ public sealed record Track(
     string? Artist = null,
     string? Channel = null,
     TimeSpan? Duration = null,
-    DateTimeOffset? PublishedAt = null);
+    DateTimeOffset? PublishedAt = null,
+    string? Description = null,
+    IReadOnlyList<string>? Tags = null);

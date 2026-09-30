@@ -10,6 +10,7 @@ public static class AnalysisServiceCollectionExtensions
     {
         services.AddScoped<IAnalysisService, AnalysisService>();
         services.AddScoped<IAnalysisPipeline, AnalysisPipeline>();
+        services.AddSingleton<IDetectionSignalProvider, MetadataHeuristicsSignalProvider>();
 
         return services;
     }

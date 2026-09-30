@@ -129,17 +129,8 @@ public sealed class YtDlpAudioAcquisitionService(
 
         try
         {
-            var root = JsonDocument.Parse(json).RootElement;
-
-            return new Track(
-                url.CanonicalUrl,
-                Title: GetString(root, "track") ?? GetString(root, "title"),
-                Artist: GetString(root, "artist") ?? GetString(root, "uploader"),
-                Channel: GetString(root, "channel") ?? GetString(root, "uploader"),
-                Duration: root.TryGetProperty("duration", out var duration) && duration.TryGetDouble(out var seconds)
-                    ? TimeSpan.FromSeconds(seconds)
-                    : null,
-                PublishedAt: ParseUploadDate(GetString(root, "upload_date")));
+            using var document = JsonDocument.Parse(json);
+            return TrackFromMetadata(document.RootElement, url.CanonicalUrl);
         }
         catch (JsonException ex)
         {
@@ -148,9 +139,30 @@ public sealed class YtDlpAudioAcquisitionService(
         }
     }
 
+    /// <summary>Maps one object of yt-dlp's <c>--print-json</c> / <c>--dump-json</c> output.</summary>
+    internal static Track TrackFromMetadata(JsonElement root, string sourceUrl) => new(
+        sourceUrl,
+        Title: GetString(root, "track") ?? GetString(root, "title"),
+        Artist: GetString(root, "artist") ?? GetString(root, "uploader"),
+        Channel: GetString(root, "channel") ?? GetString(root, "uploader"),
+        Duration: root.TryGetProperty("duration", out var duration) && duration.TryGetDouble(out var seconds)
+            ? TimeSpan.FromSeconds(seconds)
+            : null,
+        PublishedAt: ParseUploadDate(GetString(root, "upload_date")),
+        Description: GetString(root, "description"),
+        Tags: GetStrings(root, "tags"));
+
     private static string? GetString(JsonElement root, string property)
         => root.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
+            : null;
+
+    private static IReadOnlyList<string>? GetStrings(JsonElement root, string property)
+        => root.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Array
+            ? value.EnumerateArray()
+                .Where(item => item.ValueKind == JsonValueKind.String)
+                .Select(item => item.GetString()!)
+                .ToList()
             : null;
 
     private static DateTimeOffset? ParseUploadDate(string? uploadDate)
