@@ -12,7 +12,7 @@ public class MetadataHeuristicsSignalProviderTests
     private readonly MetadataHeuristicsSignalProvider _provider = new();
 
     [Fact]
-    public async Task UploadBeforeAiSongTools_IsStronglyHuman()
+    public async Task UploadBeforeAiSongToolsWereWidespread_WithNoAiMention_IsStronglyHuman()
     {
         var signal = await _provider.DetectAsync(Audio, Track(published: new DateTimeOffset(2009, 10, 25, 0, 0, 0, TimeSpan.Zero)));
 
@@ -21,15 +21,30 @@ public class MetadataHeuristicsSignalProviderTests
         Assert.Contains("2009-10-25", signal.Detail);
     }
 
-    [Fact]
-    public async Task OldUploadDate_WinsOverAiKeywords()
+    [Theory]
+    [InlineData("AI Song", null)]
+    // Early AI songs existed; an old date must not turn an open AI disclosure into "human".
+    [InlineData("Made with AI (OpenAI Jukebox)", null)]
+    [InlineData("Lost Tapes of the 27 Club", "Every song was composed by AI.")]
+    public async Task OldUploadThatMentionsAi_GivesNoSignal(string title, string? description)
     {
-        // A 2019 song titled "AI Song" is about AI; it could not have been made by Suno.
         var signal = await _provider.DetectAsync(
             Audio,
-            Track(title: "AI Song", published: new DateTimeOffset(2019, 1, 1, 0, 0, 0, TimeSpan.Zero)));
+            Track(title: title, description: description, published: new DateTimeOffset(2021, 4, 5, 0, 0, 0, TimeSpan.Zero)));
+
+        Assert.Equal(0, signal.Weight);
+        Assert.Contains("2021-04-05", signal.Detail);
+    }
+
+    [Fact]
+    public async Task OldUploadWithHumanClaim_StaysStronglyHuman()
+    {
+        var signal = await _provider.DetectAsync(
+            Audio,
+            Track(description: "No AI, just us.", published: new DateTimeOffset(2019, 1, 1, 0, 0, 0, TimeSpan.Zero)));
 
         Assert.True(signal.Score < 0.1);
+        Assert.True(signal.Weight >= 0.7);
     }
 
     [Theory]

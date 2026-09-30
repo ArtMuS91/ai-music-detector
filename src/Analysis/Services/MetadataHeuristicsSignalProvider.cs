@@ -9,19 +9,22 @@ namespace Analysis.Services;
 /// Reads the clues uploaders leave in a video's own metadata. Checks run in priority order and
 /// the first that finds something decides the signal, so its detail always names one reason:
 /// <list type="number">
-/// <item>An upload date before AI tools could make full songs with vocals — a hard fact, since a
-/// video's upload date cannot be backdated.</item>
-/// <item>An AI tool or AI disclosure named in the title, channel, tags or description.</item>
+/// <item>An AI tool or AI disclosure named in the title, channel, tags or description. On a
+/// pre-2023 upload it gives no signal either way: the video may be about AI rather than made by
+/// it, or an early experiment such as OpenAI Jukebox.</item>
+/// <item>An upload date before AI song tools became widely available, with no AI mentioned.</item>
 /// <item>A claim of being human-made, which costs nothing to write and so counts for little.</item>
 /// </list>
 /// </summary>
 public sealed partial class MetadataHeuristicsSignalProvider : IDetectionSignalProvider
 {
     /// <summary>
-    /// Suno and Udio, the first tools producing convincing full songs, went public in late 2023
-    /// and early 2024; voice-cloned "AI covers" took off in 2023. Earlier uploads predate them.
+    /// AI songs existed earlier (OpenAI Jukebox in 2020, AIVA, Mubert), but as rare experiments
+    /// rather than tools anyone could use. That changed with voice-cloned "AI covers" in 2023 and
+    /// Suno and Udio in late 2023 and 2024, so an older upload that doesn't mention AI is very
+    /// likely human-made. Upload dates cannot be backdated.
     /// </summary>
-    public static readonly DateTimeOffset AiSongToolsAvailableFrom = new(2023, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    public static readonly DateTimeOffset AiSongToolsWidespreadFrom = new(2023, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     private const int MaxReportedMentions = 3;
 
@@ -35,22 +38,31 @@ public sealed partial class MetadataHeuristicsSignalProvider : IDetectionSignalP
 
     private Signal Detect(Track track)
     {
-        if (track.PublishedAt is { } published && published < AiSongToolsAvailableFrom)
+        var fields = Fields(track).ToList();
+        var uploadedEarly = track.PublishedAt is { } published && published < AiSongToolsWidespreadFrom;
+        var uploaded = track.PublishedAt?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        var aiMentions = FindMentions(fields, AiMention(), negated: false);
+        if (aiMentions.Count > 0)
+        {
+            return uploadedEarly
+                ? new Signal(
+                    Name,
+                    Score: 0.5,
+                    Weight: 0,
+                    $"Uploaded on {uploaded}, before AI song tools were widespread, but mentions AI: "
+                    + $"{Describe(aiMentions)}. It may be about AI or an early AI experiment.")
+                : new Signal(Name, Score: 0.9, Weight: 0.6, $"The uploader mentions AI generation: {Describe(aiMentions)}.");
+        }
+
+        if (uploadedEarly)
         {
             return new Signal(
                 Name,
                 Score: 0.05,
                 Weight: 0.7,
-                $"Uploaded on {published.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}, before AI tools "
-                + "could generate full songs with vocals (Suno and Udio launched in 2023–2024).");
-        }
-
-        var fields = Fields(track).ToList();
-
-        var aiMentions = FindMentions(fields, AiMention(), negated: false);
-        if (aiMentions.Count > 0)
-        {
-            return new Signal(Name, Score: 0.9, Weight: 0.6, $"The uploader mentions AI generation: {Describe(aiMentions)}.");
+                $"Uploaded on {uploaded}, before AI song tools became widely available (voice-cloned covers "
+                + "in 2023, Suno and Udio in 2023–2024), and the metadata doesn't mention AI.");
         }
 
         var humanClaims = FindMentions(fields, HumanClaim(), negated: false)
