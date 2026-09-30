@@ -15,7 +15,7 @@ Monorepo with two independently-run apps sharing one git history:
   - `Core` — EF-mapped entities (`Core.Entities`), plain domain models (`Core.Models`), and the interfaces other projects implement, split into `Core.Repositories` (persistence seams) and `Core.Services` (business-logic and external-integration seams)
   - `Infrastructure` — implements `Core.Repositories` (EF Core/Postgres) and the external-integration half of `Core.Services` (yt-dlp acquisition, ffmpeg preprocessing, Groq web research), under matching `Repositories`/`Services` folders; references `Core`
   - `Analysis` — implements the business-logic half of `Core.Services` (`IAnalysisService`, `IAnalysisPipeline` today; detection/aggregation later) under its own `Services` folder; references `Core`
-- `tests/Core.Tests` — xUnit, references `Core`, `Analysis` and `Infrastructure` (external integrations are tested against stubbed `HttpMessageHandler`s / fakes, never real services)
+- `src/Tests/Core.Tests` — xUnit, references `Core`, `Analysis` and `Infrastructure` (external integrations are tested against stubbed `HttpMessageHandler`s / fakes, never real services)
 - `web/` — Vite + React + TypeScript + MUI frontend
 - `ml/` — Python FastAPI service hosting the audio detectors (`app/detectors/`), tests in `ml/tests` (pytest)
 

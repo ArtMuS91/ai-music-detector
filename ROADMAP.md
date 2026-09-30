@@ -10,7 +10,7 @@ Phases are ordered by dependency, so each one should leave the project in a runn
 
 - Domain models in `Core`: `Track`, `AnalysisRequest`, `AnalysisResult` (verdict: AI / Human / Mixed, confidence, supporting `Signal` list), `AnalysisStatus`
 - Core interfaces as the seams for later phases: `IAudioAcquisitionService`, `IAudioPreprocessor`, `IDetectionSignalProvider`, `ISignalAggregator`, `IAnalysisJobRepository`
-- `tests/` scaffolding — xUnit project referencing `Core` and `Analysis`, runnable via `dotnet test`
+- `src/Tests/` scaffolding — xUnit project referencing `Core` and `Analysis`, runnable via `dotnet test`
 - GitHub Actions CI: build + test the .NET solution, `npm run lint` / `npm run build` for the web app
 
 ## Phase 1 — Audio acquisition (first vertical slice)
