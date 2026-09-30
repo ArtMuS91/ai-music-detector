@@ -30,15 +30,15 @@ Phases are ordered by dependency, so each one should leave the project in a runn
 
 ## Phase 3 — ML detection service
 
-- `ml/` Python project (FastAPI) exposing a `/detect` endpoint over preprocessed audio
+- ✅ `ml/` Python project (FastAPI) exposing `POST /detect/{detector}` over the uploaded preprocessed WAV — one endpoint per detector, so each stays an independent signal; `GET /health` lists detectors
 - Multiple independent detection signals rather than a single classifier, added incrementally:
-  - Spectral anomalies (Librosa / torchaudio features)
+  - Spectral anomalies — ✅ first cut: `spectral` detector looks for the evenly spaced spectral peaks neural decoders leave behind; thresholds are uncalibrated placeholders, so its weight is capped at 0.2 until it is tuned on labelled tracks
   - Vocal synthesis indicators (Hugging Face audio deepfake models)
   - Generative-audio artifacts
   - Metadata heuristics (title/channel patterns, upload metadata)
   - ✅ Web research (done early, alongside Phase 2): `GroqWebResearchSignalProvider` asks a Groq GPT-OSS model with `browser_search` whether the track/artist is publicly known to be AI-generated, returning a score, a confidence-based weight, and evidence links verified against the actual search results. Stored in the result's signals; the verdict stays `Inconclusive` until Phase 4
 - Vocal/transcription analysis via Whisper
-- `Analysis` implements `IDetectionSignalProvider` by calling the `ml/` service over HTTP; add it to `docker-compose.yml`
+- ✅ `MlDetectionSignalProvider` (in `Infrastructure`, alongside the other external integrations) calls the `ml/` service over HTTP, one provider per id in `MlService:Detectors`; the service is in `docker-compose.yml` and CI
 
 ## Phase 4 — Aggregation and explanation
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-AI Music Detector — a web app where a user pastes a YouTube/YouTube Music link and the system estimates whether the track is AI-generated, human-created, or mixed, with confidence and supporting signals. Currently mid-MVP: audio acquisition and preprocessing work end to end; ML detection, aggregation, and the agent layer have not been implemented yet.
+AI Music Detector — a web app where a user pastes a YouTube/YouTube Music link and the system estimates whether the track is AI-generated, human-created, or mixed, with confidence and supporting signals. Currently mid-MVP: audio acquisition and preprocessing work end to end, and detection has started (web research plus a first audio detector in the Python ML service); aggregation and the agent layer have not been implemented yet.
 
 ## Repository layout
 
@@ -17,8 +17,7 @@ Monorepo with two independently-run apps sharing one git history:
   - `Analysis` — implements the business-logic half of `Core.Services` (`IAnalysisService`, `IAnalysisPipeline` today; detection/aggregation later) under its own `Services` folder; references `Core`
 - `tests/Core.Tests` — xUnit, references `Core`, `Analysis` and `Infrastructure` (external integrations are tested against stubbed `HttpMessageHandler`s / fakes, never real services)
 - `web/` — Vite + React + TypeScript + MUI frontend
-
-Planned but not yet present: `ml/` (Python ML models).
+- `ml/` — Python FastAPI service hosting the audio detectors (`app/detectors/`), tests in `ml/tests` (pytest)
 
 **yt-dlp** is the open-source CLI tool `Infrastructure` shells out to for downloading the audio-only stream from a YouTube/YouTube Music URL — it is not a library dependency, just an executable. The API's Docker image (`src/Api/Dockerfile`) bundles the standalone `yt-dlp_linux` binary so nothing needs installing on the host when running via `docker compose`; running the API with `dotnet run` instead requires `yt-dlp` on the host `PATH` (see Prerequisites below).
 
@@ -31,7 +30,7 @@ Planned but not yet present: `ml/` (Python ML models).
 ## Commands
 
 ### Prerequisites
-- Docker is the only prerequisite for running the API: `docker compose up -d` from the repo root builds and starts both Postgres and the API (with yt-dlp and ffmpeg bundled in its image), migrating the database on startup. The API is reachable at `http://localhost:5214`, same as the `dotnet run` dev workflow.
+- Docker is the only prerequisite for running the API: `docker compose up -d` from the repo root builds and starts Postgres, the ML service and the API (with yt-dlp and ffmpeg bundled in its image), migrating the database on startup. The API is reachable at `http://localhost:5214`, same as the `dotnet run` dev workflow.
 - Running the API with `dotnet run` instead of Docker needs two things Docker otherwise provides: Postgres reachable at the `Postgres` connection string in `appsettings.json` (`docker compose up -d postgres` is enough), and `yt-dlp` plus `ffmpeg` on the host `PATH` (override the locations with `YtDlp:ExecutablePath` / `Ffmpeg:ExecutablePath` if they live elsewhere).
 
 ### API (`src/Api`, run from repo root)
@@ -40,6 +39,12 @@ Planned but not yet present: `ml/` (Python ML models).
 - Run (containerized, no local prerequisites): `docker compose up -d --build` from the repo root.
 - Test: `dotnet test`
 - Add a migration: `dotnet ef migrations add <Name> --project src/Infrastructure --startup-project src/Api --output-dir Migrations` (`dotnet ef` comes from the local tool manifest — run `dotnet tool restore` once).
+
+### ML service (`ml/`, run from `ml/`)
+- Setup (once): `python -m venv .venv`, then `.venv/Scripts/pip install -r requirements-dev.txt` (`.venv/bin/pip` on Linux/macOS)
+- Run (dev): `.venv/Scripts/uvicorn app.main:app --reload --port 8000` — the API's default `MlService:BaseUrl` is `http://localhost:8000/`; `docker compose up -d ml` works too
+- Test: `.venv/Scripts/pytest`
+- Lint/format: `.venv/Scripts/ruff check .` and `.venv/Scripts/ruff format .`
 
 ### Web (`web/`)
 - Install: `npm install`
@@ -72,6 +77,7 @@ Planned but not yet present: `ml/` (Python ML models).
 - Work is queued, not done in the request: `POST /api/analyze` persists a job and returns 202, `AnalysisWorker` (an `IHostedService` inside the API process — no separate worker project) claims it, `AnalysisPipeline` runs it through every stage to `Completed`/`Failed` and deletes its audio files, and the client polls `GET /api/analyze/{id}`.
 - **One job at a time, one worker.** The MVP deliberately processes jobs sequentially in a single worker. That is what makes startup recovery simple: when the worker starts, nothing can really be in flight, so `IAnalysisPipeline.RecoverInterruptedAsync` requeues any job still in `Acquiring`/`Preprocessing`/`Analyzing` (stranded by a shutdown) and deletes its leftover audio. Claiming still uses `FOR UPDATE SKIP LOCKED`, but running a second worker (another replica or parallel loops) would also need a lease/heartbeat, or recovery would requeue a job another worker still owns.
 - Signal providers are all `IDetectionSignalProvider`s registered in DI; the pipeline runs each one during `Analyzing` and leaves out any that throws. Until aggregation (Phase 4) exists, the result keeps the collected signals (with their `Evidence` links) but the verdict stays `Inconclusive`.
+- **ML service contract**: each audio detector is its own endpoint, `POST /detect/{id}` (multipart field `audio`, the preprocessed WAV), returning `{name, score, weight, detail}` — the `Signal` shape. `GET /health` lists detector ids and is what compose's healthcheck waits on. On the .NET side, `MlDetectionSignalProvider` (Infrastructure) is registered once per id in `MlService:Detectors`, so a failing detector drops only its own signal. Adding a detector = implement the `Detector` protocol in `ml/app/detectors/`, add it to `DETECTORS` in `ml/app/main.py`, and add its id to `MlService:Detectors` in `appsettings.json`.
 - `AnalysisJob.Track` and `.Result` are stored as `jsonb` via value converters — they are read and written whole, never queried by inner fields, which keeps migrations out of the way as those shapes evolve.
 - Acquisition deliberately does not transcode, so it needs no ffmpeg; format normalization belongs to preprocessing.
 - **Database naming**: Postgres identifiers (tables, columns) are snake_case, applied automatically by `EFCore.NamingConventions`'s `.UseSnakeCaseNamingConvention()` in `InfrastructureServiceCollectionExtensions`. Don't hand-roll column names to work around this — raw SQL (e.g. the `FOR UPDATE SKIP LOCKED` query in `EfAnalysisJobRepository`) must reference the snake_case names directly since the naming convention doesn't rewrite raw SQL.

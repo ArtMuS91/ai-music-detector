@@ -26,11 +26,27 @@ services:
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=aimusicdetector;Username=postgres;Password=postgres
       # Read from the gitignored .env next to this file; web research is skipped when unset.
       Groq__ApiKey: ${GROQ_API_KEY:-}
+      MlService__BaseUrl: http://ml:8000/
     ports:
       - "5214:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      ml:
+        condition: service_healthy
+
+  ml:
+    build:
+      context: ml
+    container_name: aimusicdetector-ml
+    ports:
+      # Localhost only: the API reaches it as ml:8000 inside compose; this is just for dotnet run and curl.
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
 volumes:
   postgres-data:

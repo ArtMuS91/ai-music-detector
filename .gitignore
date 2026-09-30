@@ -62,3 +62,9 @@ web/dist/
 .env.local
 .env.*.local
 npm-debug.log*
+
+# Python (ml/)
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
