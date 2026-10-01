@@ -31,7 +31,7 @@ Monorepo with two independently-run apps sharing one git history:
 
 ### Prerequisites
 - Docker is the only prerequisite for running the API: `docker compose up -d` from the repo root builds and starts Postgres, the ML service and the API (with yt-dlp and ffmpeg bundled in its image), migrating the database on startup. The API is reachable at `http://localhost:5214`, same as the `dotnet run` dev workflow.
-- Running the API with `dotnet run` instead of Docker needs two things Docker otherwise provides: Postgres reachable at the `Postgres` connection string in `appsettings.json` (`docker compose up -d postgres` is enough), and `yt-dlp` plus `ffmpeg` on the host `PATH` (override the locations with `YtDlp:ExecutablePath` / `Ffmpeg:ExecutablePath` if they live elsewhere).
+- Running the API with `dotnet run` instead of Docker needs two things Docker otherwise provides: Postgres reachable at the `Postgres` connection string in `appsettings.json` (`docker compose up -d postgres` is enough; compose publishes it on host port **5433**, not 5432, so it does not clash with a locally installed PostgreSQL), and `yt-dlp` plus `ffmpeg` on the host `PATH` (override the locations with `YtDlp:ExecutablePath` / `Ffmpeg:ExecutablePath` if they live elsewhere).
 
 ### API (`src/Api`, run from repo root)
 - Build: `dotnet build`
