@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-AI Music Detector — a web app where a user pastes a YouTube/YouTube Music link and the system estimates whether the track is AI-generated, human-created, or mixed, with confidence and supporting signals. Currently mid-MVP: audio acquisition, preprocessing, detection signals (web research, metadata heuristics, an audio detector in the Python ML service), rule-based aggregation into a verdict, a Groq-written explanation (with Whisper lyrics as context), and the result UI work end to end.
+AI Music Detector — a web app where a user pastes a YouTube/YouTube Music link and the system estimates whether the track is AI-generated, human-created, or mixed, with confidence and supporting signals. The MVP is complete: audio acquisition, preprocessing, detection signals (web research, metadata heuristics, an audio detector in the Python ML service), rule-based aggregation into a verdict, a Groq-written explanation (with Whisper lyrics as context), and the result UI work end to end.
 
 ## Repository layout
 

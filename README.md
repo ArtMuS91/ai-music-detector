@@ -14,8 +14,6 @@ Paste a YouTube or YouTube Music link and get a verdict (AI-generated, human-mad
 
 ![Analyzing an AI-generated track](docs/media/demo-ai.gif)
 
-Full-quality videos: [human-made](docs/media/demo-human.mp4) · [AI-generated](docs/media/demo-ai.mp4)
-
 ## Getting started
 
 ### API (.NET 10)
