@@ -10,10 +10,10 @@ public sealed class AnalysisPipeline(
     IAnalysisJobRepository jobs,
     IAudioAcquisitionService acquisition,
     IAudioPreprocessor preprocessor,
+    IAudioVisualizer visualizer,
     IEnumerable<IDetectionSignalProvider> signalProviders,
     ILogger<AnalysisPipeline> logger) : IAnalysisPipeline
 {
-
     public async Task RunAsync(AnalysisJobEntity job, CancellationToken cancellationToken = default)
     {
         try
@@ -35,6 +35,8 @@ public sealed class AnalysisPipeline(
                 preprocessed.SampleRate,
                 preprocessed.Channels);
 
+            // Saved with the move to Analyzing, so the client can show it while the detectors run.
+            job.Visualization = await TryVisualizeAsync(job, preprocessed, cancellationToken);
             await AdvanceAsync(job, AnalysisStatus.Analyzing, cancellationToken);
             var signals = await CollectSignalsAsync(preprocessed, acquired.Track, cancellationToken);
 
@@ -64,6 +66,7 @@ public sealed class AnalysisPipeline(
             // smallest possible failure record rather than leave the job in progress.
             logger.LogError(ex, "Could not save the outcome of job {JobId}; recording it as failed.", job.Id);
             job.Result = null;
+            job.Visualization = null;
             Fail(job, "The analysis finished, but its result could not be saved.");
             await jobs.UpdateAsync(job, cancellationToken);
         }
@@ -79,6 +82,7 @@ public sealed class AnalysisPipeline(
 
             DeleteAudioFiles(job);
             job.Track = null;
+            job.Visualization = null;
             job.Status = AnalysisStatus.Pending;
             await jobs.UpdateAsync(job, cancellationToken);
         }
@@ -112,6 +116,23 @@ public sealed class AnalysisPipeline(
         return signals;
     }
 
+    /// <summary>The pictures are a nice-to-have: without them the result page just shows less.</summary>
+    private async Task<AudioVisualization?> TryVisualizeAsync(
+        AnalysisJobEntity job,
+        PreprocessedAudio audio,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await visualizer.VisualizeAsync(audio, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Could not visualize the audio of job {JobId}; continuing without it.", job.Id);
+            return null;
+        }
+    }
+
     /// <summary>
     /// Stand-in until aggregation (Phase 4) exists: signals are kept for display, but the
     /// verdict stays inconclusive rather than guessing how to weigh them.
@@ -133,6 +154,14 @@ public sealed class AnalysisPipeline(
 
     private static void Fail(AnalysisJobEntity job, string reason)
     {
+        job.FailedStage = job.Status switch
+        {
+            AnalysisStatus.Acquiring or AnalysisStatus.Preprocessing or AnalysisStatus.Analyzing => job.Status,
+            // Failing again because the first failure could not be saved: it is still that stage.
+            AnalysisStatus.Failed => job.FailedStage,
+            // A result that could not be saved fails after Completed, which is no stage the user saw fail.
+            _ => null,
+        };
         job.Status = AnalysisStatus.Failed;
         job.FailureReason = reason.Length <= AnalysisJobEntity.FailureReasonMaxLength
             ? reason

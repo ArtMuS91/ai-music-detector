@@ -1,3 +1,5 @@
+import base64
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -59,5 +61,22 @@ def test_oversized_upload_is_rejected_before_decoding(monkeypatch):
 
 def test_missing_upload_is_422():
     response = client.post("/detect/fakeprint")
+
+    assert response.status_code == 422
+
+
+def test_visualize_returns_waveform_and_spectrogram():
+    response = client.post("/visualize", files=upload(wav_bytes(noise(seconds=5))))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["duration_seconds"] == pytest.approx(5.0)
+    assert len(body["waveform"]) == 800
+    spectrogram = body["spectrogram"]
+    assert len(base64.b64decode(spectrogram["values"])) == spectrogram["frames"] * spectrogram["bands"]
+
+
+def test_visualize_undecodable_upload_is_422():
+    response = client.post("/visualize", files=upload(b"not audio at all"))
 
     assert response.status_code == 422

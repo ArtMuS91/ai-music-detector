@@ -1,4 +1,9 @@
 export type { AnalysisStatus } from './AnalysisStatus';
 export { TERMINAL_STATUSES } from './AnalysisStatus';
+export type { AnalysisVerdict } from './AnalysisVerdict';
+export type { AnalysisResult } from './AnalysisResult';
+export type { AudioVisualization, Spectrogram } from './AudioVisualization';
+export type { EvidenceLink, EvidenceStance } from './EvidenceLink';
+export type { Signal } from './Signal';
 export type { Track } from './Track';
 export type { AnalysisJob } from './AnalysisJob';

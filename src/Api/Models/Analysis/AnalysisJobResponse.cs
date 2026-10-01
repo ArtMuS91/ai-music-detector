@@ -10,7 +10,9 @@ public sealed record AnalysisJobResponse(
     DateTimeOffset UpdatedAt,
     TrackResponse? Track,
     AnalysisResultResponse? Result,
-    string? FailureReason)
+    AudioVisualizationResponse? Visualization,
+    string? FailureReason,
+    string? FailedStage)
 {
     public static AnalysisJobResponse From(AnalysisJobEntity job)
         => new(
@@ -21,5 +23,7 @@ public sealed record AnalysisJobResponse(
             job.UpdatedAt,
             job.Track is null ? null : TrackResponse.From(job.Track),
             job.Result is null ? null : AnalysisResultResponse.From(job.Result),
-            job.FailureReason);
+            job.Visualization is null ? null : AudioVisualizationResponse.From(job.Visualization),
+            job.FailureReason,
+            job.FailedStage?.ToString());
 }

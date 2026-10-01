@@ -37,30 +37,34 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddTransient<IDetectionSignalProvider>(provider =>
             provider.GetRequiredService<GroqWebResearchSignalProvider>());
 
-        AddMlDetectors(services, configuration);
+        AddMlService(services, configuration);
 
         return services;
     }
 
     /// <summary>
-    /// Registers one provider per detector id configured under <c>MlService:Detectors</c>, all
-    /// sharing a named client for the Python service.
+    /// Registers the visualizer and one provider per detector id configured under
+    /// <c>MlService:Detectors</c>, all sharing a named client for the Python service.
     /// </summary>
-    private static void AddMlDetectors(IServiceCollection services, IConfiguration configuration)
+    private static void AddMlService(IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<MlServiceOptions>(configuration.GetSection(MlServiceOptions.SectionName));
-        services.AddHttpClient(MlDetectionSignalProvider.HttpClientName, (provider, client) =>
+        services.AddHttpClient(MlServiceOptions.HttpClientName, (provider, client) =>
         {
             var ml = provider.GetRequiredService<IOptions<MlServiceOptions>>().Value;
             client.BaseAddress = ml.BaseUrl;
             client.Timeout = ml.Timeout;
         });
 
+        services.AddTransient<IAudioVisualizer>(provider => new MlAudioVisualizer(
+            provider.GetRequiredService<IHttpClientFactory>().CreateClient(MlServiceOptions.HttpClientName),
+            provider.GetRequiredService<ILogger<MlAudioVisualizer>>()));
+
         var detectors = configuration.GetSection(MlServiceOptions.SectionName).Get<MlServiceOptions>()?.Detectors ?? [];
         foreach (var detectorId in detectors.Distinct())
         {
             services.AddTransient<IDetectionSignalProvider>(provider => new MlDetectionSignalProvider(
-                provider.GetRequiredService<IHttpClientFactory>().CreateClient(MlDetectionSignalProvider.HttpClientName),
+                provider.GetRequiredService<IHttpClientFactory>().CreateClient(MlServiceOptions.HttpClientName),
                 detectorId,
                 provider.GetRequiredService<ILogger<MlDetectionSignalProvider>>()));
         }

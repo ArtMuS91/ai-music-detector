@@ -13,6 +13,7 @@ public sealed class AnalysisPipelineTests : IDisposable
     private readonly FakeJobRepository _jobs = new();
     private readonly FakeAcquisition _acquisition;
     private readonly FakePreprocessor _preprocessor;
+    private readonly FakeVisualizer _visualizer = new();
     private readonly List<IDetectionSignalProvider> _signalProviders = [];
     private readonly AnalysisPipeline _pipeline;
 
@@ -20,7 +21,7 @@ public sealed class AnalysisPipelineTests : IDisposable
     {
         _acquisition = new FakeAcquisition(_directory);
         _preprocessor = new FakePreprocessor();
-        _pipeline = new AnalysisPipeline(_jobs, _acquisition, _preprocessor, _signalProviders, NullLogger<AnalysisPipeline>.Instance);
+        _pipeline = new AnalysisPipeline(_jobs, _acquisition, _preprocessor, _visualizer, _signalProviders, NullLogger<AnalysisPipeline>.Instance);
     }
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
@@ -80,6 +81,38 @@ public sealed class AnalysisPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task Visualization_IsSavedWithTheMoveToAnalyzing_SoTheClientCanShowItEarly()
+    {
+        var job = NewJob(AnalysisStatus.Acquiring);
+        AudioVisualization? savedWhileAnalyzing = null;
+        _jobs.OnUpdate = saved =>
+        {
+            if (saved.Status == AnalysisStatus.Analyzing)
+            {
+                savedWhileAnalyzing = saved.Visualization;
+            }
+        };
+
+        await _pipeline.RunAsync(job);
+
+        Assert.Same(_visualizer.Visualization, savedWhileAnalyzing);
+        Assert.Same(_visualizer.Visualization, job.Visualization);
+        Assert.Equal(TimeSpan.FromSeconds(45), _visualizer.LastAudio!.Start);
+    }
+
+    [Fact]
+    public async Task FailingVisualizer_IsLeftOut_WithoutFailingTheJob()
+    {
+        _visualizer.Failure = new HttpRequestException("ML service is down");
+        var job = NewJob(AnalysisStatus.Acquiring);
+
+        await _pipeline.RunAsync(job);
+
+        Assert.Equal(AnalysisStatus.Completed, job.Status);
+        Assert.Null(job.Visualization);
+    }
+
+    [Fact]
     public async Task AcquisitionFailure_FailsTheJobWithTheReason()
     {
         _acquisition.Failure = new UserFacingException("video unavailable");
@@ -89,6 +122,7 @@ public sealed class AnalysisPipelineTests : IDisposable
 
         Assert.Equal(AnalysisStatus.Failed, job.Status);
         Assert.Equal("video unavailable", job.FailureReason);
+        Assert.Equal(AnalysisStatus.Acquiring, job.FailedStage);
         Assert.Equal([AnalysisStatus.Failed], _jobs.SavedStatuses);
     }
 
@@ -101,8 +135,29 @@ public sealed class AnalysisPipelineTests : IDisposable
         await _pipeline.RunAsync(job);
 
         Assert.Equal(AnalysisStatus.Failed, job.Status);
+        Assert.Equal(AnalysisStatus.Preprocessing, job.FailedStage);
         Assert.False(File.Exists(_acquisition.LastFilePath));
         Assert.Null(job.AcquiredAudioPath);
+    }
+
+    [Fact]
+    public async Task UnsavableResult_FailsTheJob_WithoutClaimingAStageFailed()
+    {
+        _jobs.OnUpdate = saved =>
+        {
+            if (saved.Status == AnalysisStatus.Completed)
+            {
+                throw new InvalidOperationException("row too large");
+            }
+        };
+        var job = NewJob(AnalysisStatus.Acquiring);
+
+        await _pipeline.RunAsync(job);
+
+        Assert.Equal(AnalysisStatus.Failed, job.Status);
+        Assert.Null(job.FailedStage);
+        Assert.Null(job.Result);
+        Assert.Null(job.Visualization);
     }
 
     [Fact]
@@ -126,6 +181,7 @@ public sealed class AnalysisPipelineTests : IDisposable
         var stranded = NewJob(AnalysisStatus.Preprocessing);
         stranded.AcquiredAudioPath = strandedFile;
         stranded.Track = new Track(stranded.SourceUrl, Title: "Half-done");
+        stranded.Visualization = FakeVisualizer.Sample;
         _jobs.InProgress.Add(stranded);
 
         var requeued = await _pipeline.RecoverInterruptedAsync();
@@ -133,6 +189,7 @@ public sealed class AnalysisPipelineTests : IDisposable
         Assert.Equal(1, requeued);
         Assert.Equal(AnalysisStatus.Pending, stranded.Status);
         Assert.Null(stranded.Track);
+        Assert.Null(stranded.Visualization);
         Assert.Null(stranded.AcquiredAudioPath);
         Assert.False(File.Exists(strandedFile));
     }
@@ -149,10 +206,12 @@ public sealed class AnalysisPipelineTests : IDisposable
     {
         public List<AnalysisStatus> SavedStatuses { get; } = [];
         public List<AnalysisJobEntity> InProgress { get; } = [];
+        public Action<AnalysisJobEntity>? OnUpdate { get; set; }
 
         public Task UpdateAsync(AnalysisJobEntity job, CancellationToken cancellationToken = default)
         {
             SavedStatuses.Add(job.Status);
+            OnUpdate?.Invoke(job);
             return Task.CompletedTask;
         }
 
@@ -215,7 +274,26 @@ public sealed class AnalysisPipelineTests : IDisposable
 
             LastFilePath = Path.ChangeExtension(audio.FilePath, ".preprocessed.wav");
             await File.WriteAllTextAsync(LastFilePath, "pcm", cancellationToken);
-            return new PreprocessedAudio(LastFilePath, 44_100, 1, TimeSpan.FromMinutes(3));
+            return new PreprocessedAudio(LastFilePath, 44_100, 1, TimeSpan.FromMinutes(3), TimeSpan.FromSeconds(45));
+        }
+    }
+
+    private sealed class FakeVisualizer : IAudioVisualizer
+    {
+        public static readonly AudioVisualization Sample = new(
+            TimeSpan.FromSeconds(45),
+            TimeSpan.FromMinutes(3),
+            [0.5, 1],
+            new Spectrogram(1, 2, 30, 22_050, -80, [0, 255]));
+
+        public AudioVisualization Visualization { get; } = Sample;
+        public Exception? Failure { get; set; }
+        public PreprocessedAudio? LastAudio { get; private set; }
+
+        public Task<AudioVisualization> VisualizeAsync(PreprocessedAudio audio, CancellationToken cancellationToken = default)
+        {
+            LastAudio = audio;
+            return Failure is null ? Task.FromResult(Visualization) : Task.FromException<AudioVisualization>(Failure);
         }
     }
 }

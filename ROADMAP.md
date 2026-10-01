@@ -45,18 +45,13 @@ Phases are ordered by dependency, so each one should leave the project in a runn
 
 ## Phase 5 — Result UI
 
-- Verdict badge, confidence bar, per-signal breakdown
-- Waveform / spectrogram visualization
-- Progress states (acquiring → preprocessing → analyzing → done) and error states for bad or unavailable URLs
+Built ahead of Phase 4, so until aggregation lands every job shows as `Inconclusive` at 0% confidence, but the UI already renders all four verdicts.
 
-## Phase 6 — Observability and hardening
-
-- OpenTelemetry across the API and the `ml/` service
-- Test coverage grown per phase — unit tests for aggregation and preprocessing edge cases, integration tests behind fakes for acquisition and ML calls
+- ✅ Verdict badge, confidence and AI-likelihood meters, explanation, and a per-signal breakdown (heaviest first, lean toward human/AI, weight, detail, evidence links with their stance)
+- ✅ Waveform / spectrogram visualization: the audio is deleted when a job finishes, so the `ml/` service's `POST /visualize` turns the preprocessed WAV into a display-sized peak waveform and a log-frequency spectrogram (dB quantized to bytes, ~50 KB) during the job. The result is stored on the job (`visualization` jsonb) and saved with the move to `Analyzing`, so it shows up while the detectors still run. A failed visualization only costs the picture
+- ✅ Progress stepper (queue → download → preprocess → analyze → result). A failed job records the stage it failed in (`failed_stage`) and shows it in the stepper and in the error message. A rejected URL is flagged on the input field, a failed poll shows a warning and polling continues, and a job that no longer exists stops polling
 
 ## Post-MVP features
 
-- Direct file uploads (as an alternative to a YouTube URL)
 - Spotify integration
 - Model attribution (identifying which generative model/tool likely produced a track)
-- More advanced multi-agent functionality

@@ -15,5 +15,9 @@ public sealed class AnalysisJobEntity
     public string? AcquiredAudioPath { get; set; }
     public string? PreprocessedAudioPath { get; set; }
     public AnalysisResult? Result { get; set; }
+    public AudioVisualization? Visualization { get; set; }
     public string? FailureReason { get; set; }
+
+    /// <summary>The stage a <see cref="AnalysisStatus.Failed"/> job was in when it failed.</summary>
+    public AnalysisStatus? FailedStage { get; set; }
 }

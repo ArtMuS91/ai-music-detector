@@ -1,0 +1,135 @@
+import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
+import Link from '@mui/material/Link';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import type { EvidenceStance, Signal } from '../models';
+import { formatPercent } from '../format';
+
+type ChipColor = 'error' | 'success' | 'default';
+
+const STANCES: Record<EvidenceStance, { label: string; color: ChipColor }> = {
+  AiGenerated: { label: 'Says AI', color: 'error' },
+  Human: { label: 'Says human', color: 'success' },
+  Neutral: { label: 'Neutral', color: 'default' },
+};
+
+/** Within this distance of 0.5 a score is too close to call either way. */
+const UNDECIDED_MARGIN = 0.1;
+
+function lean(signal: Signal): { label: string; color: ChipColor } {
+  if (signal.weight === 0) {
+    return { label: 'No evidence either way', color: 'default' };
+  }
+
+  if (signal.score >= 0.5 + UNDECIDED_MARGIN) {
+    return { label: 'Leans AI', color: 'error' };
+  }
+
+  if (signal.score <= 0.5 - UNDECIDED_MARGIN) {
+    return { label: 'Leans human', color: 'success' };
+  }
+
+  return { label: 'Undecided', color: 'default' };
+}
+
+/** A bar growing from the middle: left toward human, right toward AI. */
+function LeanBar({ signal }: { signal: Signal }) {
+  const offset = Math.abs(signal.score - 0.5) * 100;
+  const towardAi = signal.score >= 0.5;
+
+  return (
+    <Box aria-hidden sx={{ position: 'relative', height: 6, borderRadius: 3, bgcolor: 'action.hover' }}>
+      <Box sx={{ position: 'absolute', left: '50%', top: -2, bottom: -2, width: '1px', bgcolor: 'text.disabled' }} />
+      {signal.weight > 0 && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            borderRadius: 3,
+            left: towardAi ? '50%' : `${50 - offset}%`,
+            width: `${offset}%`,
+            bgcolor: towardAi ? 'error.main' : 'success.main',
+          }}
+        />
+      )}
+    </Box>
+  );
+}
+
+function SignalItem({ signal }: { signal: Signal }) {
+  const { label, color } = lean(signal);
+
+  return (
+    <Stack component="li" spacing={1} sx={{ py: 1.5 }}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="subtitle2" component="h3">
+          {signal.name}
+        </Typography>
+        <Chip size="small" variant="outlined" label={label} color={color} />
+      </Stack>
+      <LeanBar signal={signal} />
+      <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+        <Typography variant="caption" color="text.secondary">
+          Human
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {`Score ${signal.score.toFixed(2)} · weight ${formatPercent(signal.weight)}`}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          AI
+        </Typography>
+      </Stack>
+      {signal.detail && (
+        <Typography variant="body2" color="text.secondary">
+          {signal.detail}
+        </Typography>
+      )}
+      {signal.evidence.length > 0 && (
+        <Stack component="ul" spacing={0.5} sx={{ listStyle: 'none', p: 0, m: 0 }}>
+          {signal.evidence.map((link) => (
+            <Stack
+              component="li"
+              key={link.url}
+              direction="row"
+              spacing={1}
+              sx={{ alignItems: 'center', minWidth: 0 }}
+            >
+              <Chip size="small" label={STANCES[link.stance].label} color={STANCES[link.stance].color} />
+              <Link href={link.url} target="_blank" rel="noopener noreferrer" variant="body2" noWrap>
+                {link.title ?? link.url}
+              </Link>
+            </Stack>
+          ))}
+        </Stack>
+      )}
+    </Stack>
+  );
+}
+
+function SignalBreakdown({ signals }: { signals: Signal[] }) {
+  // Heaviest first: those are the ones that move the verdict.
+  const ordered = [...signals].sort((a, b) => b.weight - a.weight);
+
+  return (
+    <Stack spacing={0.5}>
+      <Typography variant="h6" component="h2">
+        Signals
+      </Typography>
+      {ordered.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          No detection signals were available for this track.
+        </Typography>
+      ) : (
+        <Box component="ul" aria-label="Signals" sx={{ listStyle: 'none', p: 0, m: 0 }}>
+          {ordered.map((signal) => (
+            <SignalItem key={signal.name} signal={signal} />
+          ))}
+        </Box>
+      )}
+    </Stack>
+  );
+}
+
+export default SignalBreakdown;

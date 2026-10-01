@@ -21,13 +21,15 @@ public sealed class AnalysisDbContext(DbContextOptions<AnalysisDbContext> option
         job.Property(x => x.SourceUrl).HasMaxLength(2048);
         job.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
         job.Property(x => x.FailureReason).HasMaxLength(AnalysisJobEntity.FailureReasonMaxLength);
+        job.Property(x => x.FailedStage).HasConversion<string>().HasMaxLength(32);
         job.Property(x => x.AcquiredAudioPath).HasMaxLength(1024);
         job.Property(x => x.PreprocessedAudioPath).HasMaxLength(1024);
 
-        // Track and Result are read and written whole, never queried by their
+        // Track, Result and Visualization are read and written whole, never queried by their
         // inner fields, so jsonb keeps the schema flat as the shape evolves.
         job.Property(x => x.Track).HasConversion(JsonConverterFor<Track>()).HasColumnType("jsonb");
         job.Property(x => x.Result).HasConversion(JsonConverterFor<AnalysisResult>()).HasColumnType("jsonb");
+        job.Property(x => x.Visualization).HasConversion(JsonConverterFor<AudioVisualization>()).HasColumnType("jsonb");
 
         job.HasIndex(x => new { x.Status, x.CreatedAt });
     }

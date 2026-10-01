@@ -55,7 +55,7 @@ public sealed class FfmpegAudioPreprocessor(
                 throw new AudioPreprocessingException("ffmpeg produced no audio samples.");
             }
 
-            return new PreprocessedAudio(outputPath, _options.SampleRate, Channels, duration);
+            return new PreprocessedAudio(outputPath, _options.SampleRate, Channels, duration, window?.Start ?? TimeSpan.Zero);
         }
         catch
         {
