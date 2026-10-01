@@ -5,6 +5,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import type { EvidenceStance, Signal } from '../models';
 import { formatPercent } from '../format';
+import { leanOf, type Lean } from '../signals';
 
 type ChipColor = 'error' | 'success' | 'default';
 
@@ -23,24 +24,12 @@ function isWebUrl(url: string) {
   }
 }
 
-/** Within this distance of 0.5 a score is too close to call either way. */
-const UNDECIDED_MARGIN = 0.1;
-
-function lean(signal: Signal): { label: string; color: ChipColor } {
-  if (signal.weight === 0) {
-    return { label: 'No evidence either way', color: 'default' };
-  }
-
-  if (signal.score >= 0.5 + UNDECIDED_MARGIN) {
-    return { label: 'Leans AI', color: 'error' };
-  }
-
-  if (signal.score <= 0.5 - UNDECIDED_MARGIN) {
-    return { label: 'Leans human', color: 'success' };
-  }
-
-  return { label: 'Undecided', color: 'default' };
-}
+const LEANS: Record<Lean, { label: string; color: ChipColor }> = {
+  ai: { label: 'Leans AI', color: 'error' },
+  human: { label: 'Leans human', color: 'success' },
+  undecided: { label: 'Undecided', color: 'default' },
+  none: { label: 'No evidence either way', color: 'default' },
+};
 
 /** A bar growing from the middle: left toward human, right toward AI. */
 function LeanBar({ signal }: { signal: Signal }) {
@@ -68,7 +57,7 @@ function LeanBar({ signal }: { signal: Signal }) {
 }
 
 function SignalItem({ signal }: { signal: Signal }) {
-  const { label, color } = lean(signal);
+  const { label, color } = LEANS[leanOf(signal)];
 
   return (
     <Stack component="li" spacing={1} sx={{ py: 1.5 }}>

@@ -14,7 +14,11 @@ public sealed class AnalysisService(IAnalysisJobRepository jobs) : IAnalysisServ
             return null;
         }
 
-        return await jobs.CreateAsync(new AnalysisRequest(url.CanonicalUrl), cancellationToken);
+        // A finished analysis of the same video is returned as is: re-running it would cost a full
+        // download and several Groq calls to reach the same answer. Failed jobs are not reused,
+        // so a link that failed (a video that was private for a while, say) can be retried.
+        return await jobs.FindLatestCompletedAsync(url.CanonicalUrl, cancellationToken)
+            ?? await jobs.CreateAsync(new AnalysisRequest(url.CanonicalUrl), cancellationToken);
     }
 
     public Task<AnalysisJobEntity?> GetAsync(Guid id, CancellationToken cancellationToken = default)

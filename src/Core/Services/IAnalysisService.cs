@@ -9,7 +9,10 @@ namespace Core.Services;
 /// </summary>
 public interface IAnalysisService
 {
-    /// <returns>The created job, or null when <paramref name="sourceUrl"/> is not a YouTube video link.</returns>
+    /// <returns>
+    /// The latest completed job for the same video if there is one, otherwise a newly queued job;
+    /// null when <paramref name="sourceUrl"/> is not a YouTube video link.
+    /// </returns>
     Task<AnalysisJobEntity?> SubmitAsync(string sourceUrl, CancellationToken cancellationToken = default);
 
     Task<AnalysisJobEntity?> GetAsync(Guid id, CancellationToken cancellationToken = default);

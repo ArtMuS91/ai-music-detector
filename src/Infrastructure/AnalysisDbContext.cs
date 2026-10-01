@@ -32,6 +32,8 @@ public sealed class AnalysisDbContext(DbContextOptions<AnalysisDbContext> option
         job.Property(x => x.Visualization).HasConversion(JsonConverterFor<AudioVisualization>()).HasColumnType("jsonb");
 
         job.HasIndex(x => new { x.Status, x.CreatedAt });
+        // Looking up an earlier result for a submitted link.
+        job.HasIndex(x => new { x.SourceUrl, x.Status });
     }
 
     private static ValueConverter<T?, string?> JsonConverterFor<T>()

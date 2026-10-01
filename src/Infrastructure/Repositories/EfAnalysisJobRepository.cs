@@ -26,6 +26,12 @@ public sealed class EfAnalysisJobRepository(AnalysisDbContext db, TimeProvider c
     public Task<AnalysisJobEntity?> GetAsync(Guid id, CancellationToken cancellationToken = default)
         => db.Jobs.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
+    public Task<AnalysisJobEntity?> FindLatestCompletedAsync(string sourceUrl, CancellationToken cancellationToken = default)
+        => db.Jobs.AsNoTracking()
+            .Where(x => x.SourceUrl == sourceUrl && x.Status == AnalysisStatus.Completed)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public async Task UpdateAsync(AnalysisJobEntity job, CancellationToken cancellationToken = default)
     {
         job.UpdatedAt = clock.GetUtcNow();

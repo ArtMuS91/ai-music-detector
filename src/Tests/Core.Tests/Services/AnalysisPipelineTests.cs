@@ -277,6 +277,9 @@ public sealed class AnalysisPipelineTests : IDisposable
         public Task<AnalysisJobEntity?> GetAsync(Guid id, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
+        public Task<AnalysisJobEntity?> FindLatestCompletedAsync(string sourceUrl, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
         public Task<AnalysisJobEntity?> ClaimNextPendingAsync(CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
     }

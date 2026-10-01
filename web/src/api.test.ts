@@ -1,26 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { checkHealth, getAnalysis, InvalidUrlError, JobNotFoundError, submitAnalysis } from './api';
+import { getAnalysis, InvalidUrlError, JobNotFoundError, submitAnalysis } from './api';
 import { job, json, mockApi, networkError } from './test/mockApi';
-
-describe('checkHealth', () => {
-  it('is true when the API answers 200', async () => {
-    mockApi({ 'GET /health': () => json({ status: 'ok' }) });
-
-    expect(await checkHealth()).toBe(true);
-  });
-
-  it('is false when the API answers with an error status', async () => {
-    mockApi({ 'GET /health': () => json({}, 503) });
-
-    expect(await checkHealth()).toBe(false);
-  });
-
-  it('is false instead of throwing when the API is unreachable', async () => {
-    mockApi({ 'GET /health': networkError });
-
-    expect(await checkHealth()).toBe(false);
-  });
-});
 
 describe('submitAnalysis', () => {
   it('posts the url as JSON and returns the created job', async () => {
@@ -50,6 +30,18 @@ describe('submitAnalysis', () => {
     mockApi({ 'POST /api/analyze': () => json({ title: 'Bad Request' }, 400) });
 
     await expect(submitAnalysis('x')).rejects.toThrow('That link could not be accepted.');
+  });
+
+  it('returns an already analyzed job, completed, from a 200', async () => {
+    mockApi({ 'POST /api/analyze': () => json(job({ status: 'Completed' }), 200) });
+
+    expect((await submitAnalysis('https://youtu.be/jNQXAC9IVRw')).status).toBe('Completed');
+  });
+
+  it('explains an unreachable API instead of surfacing a raw fetch error', async () => {
+    mockApi({ 'POST /api/analyze': networkError });
+
+    await expect(submitAnalysis('x')).rejects.toThrow('Could not reach the API. Check that it is running and try again.');
   });
 
   it('reports the status code for other failures', async () => {

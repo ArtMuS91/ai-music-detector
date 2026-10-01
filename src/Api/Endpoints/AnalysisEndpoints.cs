@@ -1,4 +1,5 @@
 using Api.Models.Analysis;
+using Core.Models;
 using Core.Services;
 
 namespace Api.Endpoints;
@@ -13,7 +14,7 @@ public static class AnalysisEndpoints
 
         group.MapPost("/", SubmitAsync)
             .WithName("SubmitAnalysis")
-            .WithSummary("Queues a YouTube / YouTube Music track for analysis.")
+            .WithSummary("Queues a YouTube / YouTube Music track for analysis, or returns its earlier completed result.")
             .RequireRateLimiting(SubmitRateLimitPolicy);
 
         group.MapGet("/{id:guid}", GetAsync)
@@ -36,6 +37,12 @@ public static class AnalysisEndpoints
             {
                 [nameof(request.Url)] = ["Not a YouTube or YouTube Music video link."],
             });
+        }
+
+        // Already analyzed: the result is ready now, so there is nothing to accept for later.
+        if (job.Status == AnalysisStatus.Completed)
+        {
+            return Results.Ok(AnalysisJobResponse.From(job));
         }
 
         return Results.AcceptedAtRoute(

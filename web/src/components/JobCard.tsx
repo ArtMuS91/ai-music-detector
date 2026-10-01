@@ -77,6 +77,13 @@ function JobCard({ job }: { job: AnalysisJob }) {
             </Stack>
           )}
 
+          {job.status === 'Completed' && (
+            // A link analyzed before returns that stored result at once; the date says how fresh it is.
+            <Typography variant="caption" color="text.secondary">
+              {`Result from ${new Date(job.updatedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}`}
+            </Typography>
+          )}
+
           {job.status === 'Failed' && <FailureAlert job={job} />}
 
           {job.result && (

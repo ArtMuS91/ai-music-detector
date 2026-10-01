@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
+import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
-import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
-import { checkHealth, getAnalysis, InvalidUrlError, JobNotFoundError, submitAnalysis } from './api';
+import Grid from '@mui/material/Grid';
+import { getAnalysis, InvalidUrlError, JobNotFoundError, submitAnalysis } from './api';
 import { TERMINAL_STATUSES, type AnalysisJob } from './models';
+import HowItWorks from './components/HowItWorks';
 import JobCard from './components/JobCard';
 
 const POLL_INTERVAL_MS = 1500;
-
-type ApiStatus = 'checking' | 'online' | 'offline';
 
 function messageOf(e: unknown) {
   return e instanceof Error ? e.message : String(e);
@@ -20,7 +20,6 @@ function messageOf(e: unknown) {
 
 function App() {
   const [url, setUrl] = useState('');
-  const [apiStatus, setApiStatus] = useState<ApiStatus>('checking');
   const [job, setJob] = useState<AnalysisJob | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,12 +27,6 @@ function App() {
   const [pollError, setPollError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const jobIdRef = useRef<string | null>(null);
-
-  const isOnline = apiStatus === 'online';
-
-  useEffect(() => {
-    checkHealth().then((ok) => setApiStatus(ok ? 'online' : 'offline'));
-  }, []);
 
   useEffect(() => {
     if (!job || TERMINAL_STATUSES.includes(job.status)) {
@@ -90,53 +83,58 @@ function App() {
     }
   }
 
-  const canSubmit = url !== '' && !submitting && isOnline;
+  const canSubmit = url !== '' && !submitting;
 
   return (
-    <Container maxWidth="md" sx={{ py: 8 }}>
-      <Stack spacing={3}>
-        <Stack spacing={1}>
-          <Typography variant="h4" component="h1">
-            AI Music Detector
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Paste a YouTube / YouTube Music link to analyze the track.
-          </Typography>
-        </Stack>
+    <Container maxWidth="lg" sx={{ py: { xs: 4, md: 8 } }}>
+      <Grid container spacing={4}>
+        <Grid size={{ xs: 12, md: 8 }}>
+          <Stack spacing={3}>
+            <Stack spacing={1}>
+              <Typography variant="h4" component="h1">
+                AI Music Detector
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Paste a YouTube / YouTube Music link to analyze the track.
+              </Typography>
+            </Stack>
 
-        <TextField
-          label="YouTube URL"
-          placeholder="https://music.youtube.com/watch?v="
-          value={url}
-          onChange={(e) => {
-            setUrl(e.target.value);
-            setUrlError(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && canSubmit) {
-              handleSubmit();
-            }
-          }}
-          error={urlError !== null}
-          helperText={urlError}
-          fullWidth
-        />
-        <Button variant="contained" disabled={!canSubmit} onClick={handleSubmit}>
-          Analyze
-        </Button>
+            <TextField
+              label="YouTube URL"
+              placeholder="https://music.youtube.com/watch?v="
+              value={url}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                setUrlError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && canSubmit) {
+                  handleSubmit();
+                }
+              }}
+              error={urlError !== null}
+              helperText={urlError}
+              fullWidth
+            />
+            <Button variant="contained" disabled={!canSubmit} onClick={handleSubmit}>
+              Analyze
+            </Button>
 
-        {error && <Alert severity="error">{error}</Alert>}
+            {error && <Alert severity="error">{error}</Alert>}
 
-        {pollError && <Alert severity="warning">{pollError}</Alert>}
+            {pollError && <Alert severity="warning">{pollError}</Alert>}
 
-        {job && <JobCard job={job} />}
+            {job && <JobCard job={job} />}
 
-        <Chip
-          label={`API: ${apiStatus}`}
-          color={apiStatus === 'online' ? 'success' : apiStatus === 'offline' ? 'error' : 'default'}
-          sx={{ alignSelf: 'flex-start' }}
-        />
-      </Stack>
+          </Stack>
+        </Grid>
+        <Grid size={{ xs: 12, md: 4 }}>
+          {/* Stays in view beside a long result on wide screens; drops below the form on narrow ones. */}
+          <Box sx={{ position: { md: 'sticky' }, top: { md: 32 } }}>
+            <HowItWorks />
+          </Box>
+        </Grid>
+      </Grid>
     </Container>
   );
 }
