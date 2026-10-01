@@ -39,13 +39,16 @@ Phases are ordered by dependency, so each one should leave the project in a runn
 
 ## Phase 4 — Aggregation and explanation
 
-- `ISignalAggregator` in `Analysis`: combine signal scores into verdict + confidence (start with weighted rules, not a learned meta-model). Signals can disagree confidently: on the Phase 3 check, web research called an AI act (Aventhis) human at weight 0.8 while `fakeprint` scored it 1.00, so a strong audio signal should be able to outvote it
-- AI analysis agent (Groq API) turning aggregated signals into a human-readable explanation; MCP tools and RAG over detection knowledge if justification quality needs it
-- Lyrics transcription via Whisper, as input for the agent's explanation rather than a detection signal of its own
+- ✅ `WeightedSignalAggregator` in `Analysis`: weighted log-odds pooling, a set of hand-written rules rather than a learned meta-model. Each signal adds `weight × logit(score)` evidence, and the AI likelihood is the logistic of the sum, capped at 1–99% because the signals aren't fully independent.
+  - **Verdict:** AI past 65%, human below 35%, otherwise Inconclusive. Mixed when both sides have strong evidence and neither wins by much, as an AI cover of a documented human song would.
+  - **Confidence:** distance from 50%, discounted when signals disagree. Mixed never claims more than 60%.
+  - **Aventhis case:** `fakeprint` at 1.00 outvotes web research's "human" at the same weight.
+- ✅ AI analysis agent: `GroqResultExplainer` (Infrastructure) has a GPT-OSS model on Groq write a 3–5 sentence explanation of the result. It explains the verdict the rules already reached and never decides it, so a bad or manipulated reply can only word the explanation badly. If it fails, the aggregator's rule-based summary stays. MCP tools and RAG over detection knowledge are still open, if explanation quality turns out to need them
+- ✅ Lyrics transcription: `GroqLyricsTranscriber` runs Whisper (`whisper-large-v3-turbo`) on Groq over the preprocessed excerpt, as input for the explanation only, not a signal. Segments Whisper itself rates as unreliable (likely non-speech, low confidence or repetitive) are dropped, so made-up text over instrumentals doesn't reach the agent
 
 ## Phase 5 — Result UI
 
-Built ahead of Phase 4, so until aggregation lands every job shows as `Inconclusive` at 0% confidence, but the UI already renders all four verdicts.
+Built ahead of Phase 4, so the UI renders all four verdicts.
 
 - ✅ Verdict badge, confidence and AI-likelihood meters, explanation, and a per-signal breakdown (heaviest first, lean toward human/AI, weight, detail, evidence links with their stance)
 - ✅ Waveform / spectrogram visualization: the audio is deleted when a job finishes, so the `ml/` service's `POST /visualize` turns the preprocessed WAV into a display-sized peak waveform and a log-frequency spectrogram (dB quantized to bytes, ~50 KB) during the job. The result is stored on the job (`visualization` jsonb) and saved with the move to `Analyzing`, so it shows up while the detectors still run. A failed visualization only costs the picture
