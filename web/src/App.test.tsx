@@ -52,6 +52,30 @@ describe('App', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('analyzes the link given in the address as soon as the page opens', async () => {
+    window.history.replaceState(null, '', `/?url=${encodeURIComponent(VIDEO_URL)}`);
+    const fetchMock = mockApi({
+      'POST /api/analyze': () => json(job({ status: 'Completed', result: result() }), 200),
+    });
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'AI-generated' })).toBeInTheDocument();
+    expect(urlInput()).toHaveValue(VIDEO_URL);
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({ url: VIDEO_URL });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('puts the submitted link into the address, so the page can be shared', async () => {
+    mockApi({ 'POST /api/analyze': () => json(job(), 202) });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(urlInput(), `  ${VIDEO_URL}  {Enter}`);
+    await screen.findByText('Queued');
+
+    expect(new URLSearchParams(window.location.search).get('url')).toBe(VIDEO_URL);
+  });
+
   it('has no API status badge', () => {
     mockApi({});
     render(<App />);

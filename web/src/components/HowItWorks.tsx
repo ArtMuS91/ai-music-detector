@@ -6,6 +6,8 @@ import Divider from '@mui/material/Divider';
 import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import CollapsibleSection from './CollapsibleSection';
+import { signalNameSx } from '../theme';
 import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
 import GraphicEqOutlined from '@mui/icons-material/GraphicEqOutlined';
 import ManageSearchOutlined from '@mui/icons-material/ManageSearchOutlined';
@@ -63,74 +65,78 @@ function HowItWorks() {
   return (
     <Card variant="outlined" component="aside" aria-labelledby="how-it-works-title">
       <CardContent>
-        <Stack spacing={2}>
-          <Typography id="how-it-works-title" variant="h6" component="h2">
-            How it works
-          </Typography>
-
-          <Stack component="ol" spacing={1.5} sx={{ listStyle: 'none', p: 0, m: 0 }}>
-            {STEPS.map((step) => (
-              <Stack component="li" key={step.title} direction="row" spacing={1.5}>
-                <Box sx={{ color: 'primary.main', display: 'flex', pt: 0.25 }} aria-hidden>
-                  {step.icon}
-                </Box>
-                <Box>
-                  <Typography variant="subtitle2" component="h3">
-                    {step.title}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {step.text}
-                  </Typography>
-                  {step.listsSignals && (
-                    <Box component="ul" sx={{ pl: 2, my: 0.5 }}>
-                      {SIGNALS.map((signal) => (
-                        <Typography component="li" variant="body2" color="text.secondary" key={signal.name}>
-                          <Box component="strong" sx={{ color: 'text.primary' }}>
-                            {signal.name}
-                          </Box>
-                          {` — ${signal.text}`}
-                        </Typography>
-                      ))}
-                    </Box>
-                  )}
-                </Box>
-              </Stack>
-            ))}
-          </Stack>
-
-          <Divider />
-
-          <Stack spacing={1}>
-            <Typography variant="subtitle2" component="h3">
-              Built with
-            </Typography>
-            <Stack component="ul" spacing={0.75} sx={{ listStyle: 'none', p: 0, m: 0 }}>
-              {SOURCES.map((source) => (
-                <Typography component="li" variant="body2" color="text.secondary" key={source.name}>
-                  <Link href={source.href} target="_blank" rel="noopener noreferrer" sx={{ fontWeight: 600 }}>
-                    {source.name}
-                  </Link>
-                  {` — ${source.use}`}
-                </Typography>
+        <CollapsibleSection
+          title="How it works"
+          component="h2"
+          variant="h6"
+          headingId="how-it-works-title"
+          storageKey="aimd.howItWorks.expanded"
+        >
+          <Stack spacing={2} sx={{ pt: 1.5 }}>
+            <Stack component="ol" spacing={1.5} sx={{ listStyle: 'none', p: 0, m: 0 }}>
+              {STEPS.map((step) => (
+                <Stack component="li" key={step.title} direction="row" spacing={1.5}>
+                  <Box sx={{ color: 'primary.main', display: 'flex', pt: 0.25 }} aria-hidden>
+                    {step.icon}
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle2" component="h3">
+                      {step.title}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {step.text}
+                    </Typography>
+                    {step.listsSignals && (
+                      <Box component="ul" sx={{ pl: 2, my: 0.5 }}>
+                        {SIGNALS.map((signal) => (
+                          <Typography component="li" variant="body2" color="text.secondary" key={signal.name}>
+                            <Box component="strong" sx={signalNameSx}>
+                              {signal.name}
+                            </Box>
+                            {` — ${signal.text}`}
+                          </Typography>
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
+                </Stack>
               ))}
             </Stack>
-          </Stack>
 
-          <Divider />
+            <Divider />
 
-          <Stack direction="row" spacing={1.5}>
-            <Box sx={{ color: 'text.secondary', display: 'flex', pt: 0.25 }} aria-hidden>
-              <DeleteOutlined fontSize="small" />
-            </Box>
-            <Typography variant="body2" color="text.secondary">
-              The audio is deleted as soon as the analysis finishes. Only the results are kept.
+            <Stack spacing={1}>
+              <Typography variant="subtitle2" component="h3">
+                Built with
+              </Typography>
+              <Stack component="ul" spacing={0.75} sx={{ listStyle: 'none', p: 0, m: 0 }}>
+                {SOURCES.map((source) => (
+                  <Typography component="li" variant="body2" color="text.secondary" key={source.name}>
+                    <Link href={source.href} target="_blank" rel="noopener noreferrer" sx={{ fontWeight: 600 }}>
+                      {source.name}
+                    </Link>
+                    {` — ${source.use}`}
+                  </Typography>
+                ))}
+              </Stack>
+            </Stack>
+
+            <Divider />
+
+            <Stack direction="row" spacing={1.5}>
+              <Box sx={{ color: 'text.secondary', display: 'flex', pt: 0.25 }} aria-hidden>
+                <DeleteOutlined fontSize="small" />
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                The audio is deleted as soon as the analysis finishes. Only the results are kept.
+              </Typography>
+            </Stack>
+
+            <Typography variant="caption" color="text.secondary">
+              Every signal can be wrong, so treat the verdict as an estimate rather than proof.
             </Typography>
           </Stack>
-
-          <Typography variant="caption" color="text.secondary">
-            Every signal can be wrong, so treat the verdict as an estimate rather than proof.
-          </Typography>
-        </Stack>
+        </CollapsibleSection>
       </CardContent>
     </Card>
   );

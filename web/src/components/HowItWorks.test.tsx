@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import HowItWorks from './HowItWorks';
 
@@ -6,6 +7,16 @@ describe('HowItWorks', () => {
   it('is a labelled side panel', () => {
     render(<HowItWorks />);
 
+    expect(screen.getByRole('complementary', { name: 'How it works' })).toBeInTheDocument();
+  });
+
+  it('can be folded down to its title', async () => {
+    const user = userEvent.setup();
+    render(<HowItWorks />);
+
+    await user.click(screen.getByRole('button', { name: 'How it works' }));
+
+    await waitFor(() => expect(screen.queryByText('Built with')).not.toBeInTheDocument());
     expect(screen.getByRole('complementary', { name: 'How it works' })).toBeInTheDocument();
   });
 

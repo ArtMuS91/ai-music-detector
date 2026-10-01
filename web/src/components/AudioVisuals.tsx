@@ -4,6 +4,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import type { AudioVisualization, Spectrogram } from '../models';
 import { formatDuration, formatFrequency } from '../format';
+import CollapsibleSection from './CollapsibleSection';
 import { frequencyTicks, spectrogramPixels, waveformPath } from '../visualization';
 
 const WAVEFORM_HEIGHT = 72;
@@ -80,24 +81,23 @@ function AudioVisuals({ visualization }: { visualization: AudioVisualization }) 
   const end = start + visualization.durationSeconds;
 
   return (
-    <Stack spacing={1}>
-      <Typography variant="h6" component="h2">
-        Audio
-      </Typography>
-      <Waveform peaks={visualization.waveform} />
-      <SpectrogramImage spectrogram={visualization.spectrogram} />
-      <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
-        <Typography variant="caption" color="text.secondary">
-          {formatDuration(start)}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {`Analyzed excerpt ${formatDuration(start)}–${formatDuration(end)}`}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {formatDuration(end)}
-        </Typography>
+    <CollapsibleSection title="Audio" component="h2" variant="h6" storageKey="aimd.audio.expanded">
+      <Stack spacing={1} sx={{ pt: 1 }}>
+        <Waveform peaks={visualization.waveform} />
+        <SpectrogramImage spectrogram={visualization.spectrogram} />
+        <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+          <Typography variant="caption" color="text.secondary">
+            {formatDuration(start)}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {`Analyzed excerpt ${formatDuration(start)}–${formatDuration(end)}`}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {formatDuration(end)}
+          </Typography>
+        </Stack>
       </Stack>
-    </Stack>
+    </CollapsibleSection>
   );
 }
 

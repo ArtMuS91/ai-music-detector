@@ -9,7 +9,8 @@ import CallSplitOutlined from '@mui/icons-material/CallSplitOutlined';
 import HelpOutlineOutlined from '@mui/icons-material/HelpOutlineOutlined';
 import type { AnalysisResult, AnalysisVerdict, Signal } from '../models';
 import { formatPercent } from '../format';
-import { leanOf, splitBySignalNames, type Lean } from '../signals';
+import { highlightParts, leanOf, type Lean } from '../signals';
+import { numberSx, signalNameSx } from '../theme';
 import Meter from './Meter';
 
 const VERDICTS: Record<AnalysisVerdict, { label: string; background: string; foreground: string; icon: ReactElement }> = {
@@ -37,14 +38,6 @@ const VERDICTS: Record<AnalysisVerdict, { label: string; background: string; for
     foreground: 'common.white',
     icon: <HelpOutlineOutlined fontSize="inherit" />,
   },
-};
-
-/** Text colour for a signal's name wherever it appears, so its lean reads at a glance. */
-const LEAN_COLORS: Record<Lean, string> = {
-  ai: 'error.main',
-  human: 'success.main',
-  undecided: 'text.primary',
-  none: 'text.primary',
 };
 
 const COLUMNS: { title: string; leans: Lean[]; accent: string }[] = [
@@ -154,7 +147,7 @@ function SignalColumns({ signals }: { signals: Signal[] }) {
   );
 }
 
-/** The explanation with every mention of a signal picked out in that signal's lean colour. */
+/** The explanation with signal names and figures picked out, so its key facts can be skimmed. */
 function Explanation({ text, signals }: { text: string; signals: Signal[] }) {
   return (
     <Stack spacing={1}>
@@ -162,15 +155,25 @@ function Explanation({ text, signals }: { text: string; signals: Signal[] }) {
         Explanation
       </Typography>
       <Typography variant="body2" sx={{ borderLeft: 4, borderColor: 'divider', pl: 2, lineHeight: 1.7 }}>
-        {splitBySignalNames(text, signals).map((part, index) =>
-          part.signal ? (
-            <Box component="strong" key={index} sx={{ color: LEAN_COLORS[leanOf(part.signal)], fontWeight: 700 }}>
-              {part.text}
-            </Box>
-          ) : (
-            part.text
-          ),
-        )}
+        {highlightParts(text, signals).map((part, index) => {
+          if (part.kind === 'signal') {
+            return (
+              <Box component="strong" key={index} sx={signalNameSx}>
+                {part.text}
+              </Box>
+            );
+          }
+
+          if (part.kind === 'number') {
+            return (
+              <Box component="strong" key={index} sx={numberSx}>
+                {part.text}
+              </Box>
+            );
+          }
+
+          return part.text;
+        })}
       </Typography>
     </Stack>
   );

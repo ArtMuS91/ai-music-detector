@@ -65,20 +65,21 @@ describe('VerdictSummary', () => {
     expect(screen.getAllByText('None')).toHaveLength(2);
   });
 
-  it('highlights the signals the explanation mentions', () => {
+  it('highlights the signals and figures the explanation mentions', () => {
     render(
       <VerdictSummary
         result={result({
           signals: [signal({ name: 'Generator fingerprint' }), signal({ name: 'Web research', score: 0.1 })],
-          explanation: 'The Generator fingerprint outweighed web research.',
+          explanation: 'The Generator fingerprint (0.99) outweighed web research at 74% confidence.',
         })}
       />,
     );
 
     const explanation = screen.getByRole('heading', { name: 'Explanation' }).nextElementSibling as HTMLElement;
-    expect(explanation).toHaveTextContent('The Generator fingerprint outweighed web research.');
-    expect(within(explanation).getByText('Generator fingerprint').tagName).toBe('STRONG');
-    expect(within(explanation).getByText('web research').tagName).toBe('STRONG');
+    expect(explanation).toHaveTextContent('The Generator fingerprint (0.99) outweighed web research at 74% confidence.');
+    for (const highlighted of ['Generator fingerprint', 'web research', '0.99', '74%']) {
+      expect(within(explanation).getByText(highlighted).tagName).toBe('STRONG');
+    }
   });
 
   it('leaves out the explanation when there is none', () => {

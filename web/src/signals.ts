@@ -22,21 +22,38 @@ export function leanOf(signal: Signal): Lean {
   return 'undecided';
 }
 
-export type TextPart = { text: string; signal?: Signal };
+export type TextPart = { text: string; kind?: 'signal' | 'number' };
 
 /**
- * Splits free text (the AI-written explanation) into plain parts and mentions of the given
- * signals' names, matched case-insensitively and longest name first, so they can be highlighted.
+ * A standalone number, optionally a percentage: "0.8", "1,000", "99%", "99 %" (the model often
+ * puts a narrow no-break space before %). Digits inside words ("gpt-oss-120b") are left alone.
  */
-export function splitBySignalNames(text: string, signals: Signal[]): TextPart[] {
-  const named = signals.filter((signal) => signal.name.trim() !== '');
-  if (named.length === 0) {
+const NUMBER = /((?<![\p{L}\p{N}_.])\d+(?:[.,]\d+)?(?:[\s  ]?%)?(?![\p{L}\p{N}_%]))/gu;
+
+/**
+ * Splits free text (the AI-written explanation) into plain parts, mentions of the given signals'
+ * names (matched case-insensitively, longest name first) and numbers, so both can be highlighted.
+ */
+export function highlightParts(text: string, signals: Signal[]): TextPart[] {
+  return splitBySignalNames(text, signals).flatMap((part) =>
+    part.kind
+      ? [part]
+      : part.text
+          .split(NUMBER)
+          // With a capturing split, the matched numbers are exactly the odd-indexed pieces.
+          .map((piece, index): TextPart => (index % 2 === 1 ? { text: piece, kind: 'number' } : { text: piece }))
+          .filter((piece) => piece.text !== ''),
+  );
+}
+
+function splitBySignalNames(text: string, signals: Signal[]): TextPart[] {
+  const names = [...new Set(signals.map((signal) => signal.name.trim().toLowerCase()).filter((name) => name !== ''))];
+  if (names.length === 0) {
     return [{ text }];
   }
 
-  const byName = new Map(named.map((signal) => [signal.name.toLowerCase(), signal]));
   const pattern = new RegExp(
-    `(${[...byName.keys()]
+    `(${names
       .sort((a, b) => b.length - a.length)
       .map(escapeRegExp)
       .join('|')})`,
@@ -46,10 +63,7 @@ export function splitBySignalNames(text: string, signals: Signal[]): TextPart[] 
   return text
     .split(pattern)
     .filter((part) => part !== '')
-    .map((part) => {
-      const signal = byName.get(part.toLowerCase());
-      return signal ? { text: part, signal } : { text: part };
-    });
+    .map((part) => (names.includes(part.toLowerCase()) ? { text: part, kind: 'signal' } : { text: part }));
 }
 
 function escapeRegExp(value: string) {
