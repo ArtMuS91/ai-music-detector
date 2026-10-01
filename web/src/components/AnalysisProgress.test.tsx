@@ -6,7 +6,7 @@ describe('AnalysisProgress', () => {
   it('shows every stage of the pipeline', () => {
     render(<AnalysisProgress status="Preprocessing" failedStage={null} />);
 
-    for (const label of ['Queue', 'Download', 'Preprocess', 'Analyze', 'Result']) {
+    for (const label of ['Queue', 'Download', 'Prepare', 'Analyze', 'Result']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
   });

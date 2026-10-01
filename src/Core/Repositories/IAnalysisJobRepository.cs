@@ -9,6 +9,9 @@ public interface IAnalysisJobRepository
 
     Task<AnalysisJobEntity?> GetAsync(Guid id, CancellationToken cancellationToken = default);
 
+    /// <summary>The most recent <c>Completed</c> job for this exact (canonical) source URL, if any.</summary>
+    Task<AnalysisJobEntity?> FindLatestCompletedAsync(string sourceUrl, CancellationToken cancellationToken = default);
+
     Task UpdateAsync(AnalysisJobEntity job, CancellationToken cancellationToken = default);
 
     /// <summary>Claims the oldest pending job for processing, or null when the queue is empty.</summary>

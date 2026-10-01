@@ -28,19 +28,27 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IAudioAcquisitionService, YtDlpAudioAcquisitionService>();
         services.AddSingleton<IAudioPreprocessor, FfmpegAudioPreprocessor>();
 
-        services.AddHttpClient<GroqWebResearchSignalProvider>((provider, client) =>
-        {
-            var groq = provider.GetRequiredService<IOptions<GroqOptions>>().Value;
-            client.BaseAddress = groq.BaseUrl;
-            client.Timeout = groq.Timeout;
-        });
+        AddGroqClient<GroqWebResearchSignalProvider>(services);
         services.AddTransient<IDetectionSignalProvider>(provider =>
             provider.GetRequiredService<GroqWebResearchSignalProvider>());
+        AddGroqClient<GroqLyricsTranscriber>(services);
+        services.AddTransient<ILyricsTranscriber>(provider => provider.GetRequiredService<GroqLyricsTranscriber>());
+        AddGroqClient<GroqResultExplainer>(services);
+        services.AddTransient<IResultExplainer>(provider => provider.GetRequiredService<GroqResultExplainer>());
 
         AddMlService(services, configuration);
 
         return services;
     }
+
+    private static void AddGroqClient<TClient>(IServiceCollection services)
+        where TClient : class
+        => services.AddHttpClient<TClient>((provider, client) =>
+        {
+            var groq = provider.GetRequiredService<IOptions<GroqOptions>>().Value;
+            client.BaseAddress = groq.BaseUrl;
+            client.Timeout = groq.Timeout;
+        });
 
     /// <summary>
     /// Registers the visualizer and one provider per detector id configured under

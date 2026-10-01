@@ -14,6 +14,8 @@ public sealed class AnalysisPipelineTests : IDisposable
     private readonly FakeAcquisition _acquisition;
     private readonly FakePreprocessor _preprocessor;
     private readonly FakeVisualizer _visualizer = new();
+    private readonly FakeLyricsTranscriber _lyrics = new();
+    private readonly FakeExplainer _explainer = new();
     private readonly List<IDetectionSignalProvider> _signalProviders = [];
     private readonly AnalysisPipeline _pipeline;
 
@@ -21,7 +23,16 @@ public sealed class AnalysisPipelineTests : IDisposable
     {
         _acquisition = new FakeAcquisition(_directory);
         _preprocessor = new FakePreprocessor();
-        _pipeline = new AnalysisPipeline(_jobs, _acquisition, _preprocessor, _visualizer, _signalProviders, NullLogger<AnalysisPipeline>.Instance);
+        _pipeline = new AnalysisPipeline(
+            _jobs,
+            _acquisition,
+            _preprocessor,
+            _visualizer,
+            _signalProviders,
+            new WeightedSignalAggregator(),
+            _lyrics,
+            _explainer,
+            NullLogger<AnalysisPipeline>.Instance);
     }
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
@@ -64,7 +75,49 @@ public sealed class AnalysisPipelineTests : IDisposable
 
         var signal = Assert.Single(job.Result!.Signals);
         Assert.Equal([evidence], signal.Evidence);
-        Assert.Equal(AnalysisVerdict.Inconclusive, job.Result.Verdict);
+        Assert.Equal(AnalysisVerdict.AiGenerated, job.Result.Verdict);
+    }
+
+    [Fact]
+    public async Task Result_IsExplainedByTheAgent_WithTheLyrics()
+    {
+        _signalProviders.Add(new FakeSignalProvider(new Signal("Generator fingerprint", 0.99, 0.8)));
+        _lyrics.Lyrics = "I was born in a server farm";
+        var job = NewJob(AnalysisStatus.Acquiring);
+
+        await _pipeline.RunAsync(job);
+
+        Assert.Equal("Agent explanation", job.Result!.Explanation);
+        Assert.Equal("I was born in a server farm", _explainer.LastLyrics);
+        // The agent explains the aggregated verdict; it is handed the result, not asked for one.
+        Assert.Equal(AnalysisVerdict.AiGenerated, _explainer.LastResult!.Verdict);
+        Assert.Equal(AnalysisVerdict.AiGenerated, job.Result.Verdict);
+    }
+
+    [Fact]
+    public async Task FailingExplainer_KeepsTheAggregatorsSummary()
+    {
+        _signalProviders.Add(new FakeSignalProvider(new Signal("Generator fingerprint", 0.99, 0.8)));
+        _explainer.Failure = new HttpRequestException("Groq is down");
+        var job = NewJob(AnalysisStatus.Acquiring);
+
+        await _pipeline.RunAsync(job);
+
+        Assert.Equal(AnalysisStatus.Completed, job.Status);
+        Assert.StartsWith("The signals point to an AI-generated track.", job.Result!.Explanation);
+    }
+
+    [Fact]
+    public async Task FailingTranscriber_StillExplains_WithoutLyrics()
+    {
+        _lyrics.Failure = new HttpRequestException("Whisper is down");
+        var job = NewJob(AnalysisStatus.Acquiring);
+
+        await _pipeline.RunAsync(job);
+
+        Assert.Equal(AnalysisStatus.Completed, job.Status);
+        Assert.Equal("Agent explanation", job.Result!.Explanation);
+        Assert.Null(_explainer.LastLyrics);
     }
 
     [Fact]
@@ -224,6 +277,9 @@ public sealed class AnalysisPipelineTests : IDisposable
         public Task<AnalysisJobEntity?> GetAsync(Guid id, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
+        public Task<AnalysisJobEntity?> FindLatestCompletedAsync(string sourceUrl, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
         public Task<AnalysisJobEntity?> ClaimNextPendingAsync(CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
     }
@@ -275,6 +331,29 @@ public sealed class AnalysisPipelineTests : IDisposable
             LastFilePath = Path.ChangeExtension(audio.FilePath, ".preprocessed.wav");
             await File.WriteAllTextAsync(LastFilePath, "pcm", cancellationToken);
             return new PreprocessedAudio(LastFilePath, 44_100, 1, TimeSpan.FromMinutes(3), TimeSpan.FromSeconds(45));
+        }
+    }
+
+    private sealed class FakeLyricsTranscriber : ILyricsTranscriber
+    {
+        public string? Lyrics { get; set; }
+        public Exception? Failure { get; set; }
+
+        public Task<string?> TranscribeAsync(PreprocessedAudio audio, CancellationToken cancellationToken = default)
+            => Failure is null ? Task.FromResult(Lyrics) : Task.FromException<string?>(Failure);
+    }
+
+    private sealed class FakeExplainer : IResultExplainer
+    {
+        public Exception? Failure { get; set; }
+        public AnalysisResult? LastResult { get; private set; }
+        public string? LastLyrics { get; private set; }
+
+        public Task<string> ExplainAsync(Track track, AnalysisResult result, string? lyrics, CancellationToken cancellationToken = default)
+        {
+            LastResult = result;
+            LastLyrics = lyrics;
+            return Failure is null ? Task.FromResult("Agent explanation") : Task.FromException<string>(Failure);
         }
     }
 

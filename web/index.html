@@ -5,6 +5,22 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Music Detector</title>
+    <script>
+      // Sets the color-scheme class before first paint, so a dark-mode viewer never sees the light
+      // theme flash while React loads. Mirrors MUI's InitColorSchemeScript for the setup in
+      // src/theme.ts (class selector, "mui-mode" storage key, "system" by default).
+      (function () {
+        try {
+          var mode = localStorage.getItem('mui-mode') || 'system';
+          var dark =
+            mode === 'dark' ||
+            (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.classList.add(dark ? 'dark' : 'light');
+        } catch (e) {
+          // Storage blocked: MUI's provider sets the class once React mounts.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

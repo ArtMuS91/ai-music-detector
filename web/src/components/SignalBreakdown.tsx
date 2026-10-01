@@ -5,6 +5,8 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import type { EvidenceStance, Signal } from '../models';
 import { formatPercent } from '../format';
+import { leanOf, type Lean } from '../signals';
+import CollapsibleSection from './CollapsibleSection';
 
 type ChipColor = 'error' | 'success' | 'default';
 
@@ -23,24 +25,12 @@ function isWebUrl(url: string) {
   }
 }
 
-/** Within this distance of 0.5 a score is too close to call either way. */
-const UNDECIDED_MARGIN = 0.1;
-
-function lean(signal: Signal): { label: string; color: ChipColor } {
-  if (signal.weight === 0) {
-    return { label: 'No evidence either way', color: 'default' };
-  }
-
-  if (signal.score >= 0.5 + UNDECIDED_MARGIN) {
-    return { label: 'Leans AI', color: 'error' };
-  }
-
-  if (signal.score <= 0.5 - UNDECIDED_MARGIN) {
-    return { label: 'Leans human', color: 'success' };
-  }
-
-  return { label: 'Undecided', color: 'default' };
-}
+const LEANS: Record<Lean, { label: string; color: ChipColor }> = {
+  ai: { label: 'Leans AI', color: 'error' },
+  human: { label: 'Leans human', color: 'success' },
+  undecided: { label: 'Undecided', color: 'default' },
+  none: { label: 'No evidence either way', color: 'default' },
+};
 
 /** A bar growing from the middle: left toward human, right toward AI. */
 function LeanBar({ signal }: { signal: Signal }) {
@@ -68,51 +58,58 @@ function LeanBar({ signal }: { signal: Signal }) {
 }
 
 function SignalItem({ signal }: { signal: Signal }) {
-  const { label, color } = lean(signal);
+  const { label, color } = LEANS[leanOf(signal)];
 
   return (
-    <Stack component="li" spacing={1} sx={{ py: 1.5 }}>
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="subtitle2" component="h3">
-          {signal.name}
-        </Typography>
-        <Chip size="small" variant="outlined" label={label} color={color} />
-      </Stack>
-      <LeanBar signal={signal} />
-      <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
-        <Typography variant="caption" color="text.secondary">
-          Human
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {`Score ${signal.score.toFixed(2)} · weight ${formatPercent(signal.weight)}`}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          AI
-        </Typography>
-      </Stack>
-      {signal.detail && (
-        <Typography variant="body2" color="text.secondary">
-          {signal.detail}
-        </Typography>
-      )}
-      {signal.evidence.some((link) => isWebUrl(link.url)) && (
-        <Stack component="ul" spacing={0.5} sx={{ listStyle: 'none', p: 0, m: 0 }}>
-          {signal.evidence.filter((link) => isWebUrl(link.url)).map((link) => (
-            <Stack
-              component="li"
-              key={link.url}
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: 'center', minWidth: 0 }}
-            >
-              <Chip size="small" label={STANCES[link.stance].label} color={STANCES[link.stance].color} />
-              <Link href={link.url} target="_blank" rel="noopener noreferrer" variant="body2" noWrap>
-                {link.title ?? link.url}
-              </Link>
+    // Each signal is its own bordered panel, so where one ends and the next begins is plain.
+    <Stack
+      component="li"
+      sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 2, bgcolor: 'action.hover' }}
+    >
+      <CollapsibleSection
+        title={signal.name}
+        component="h3"
+        variant="subtitle2"
+        trailing={<Chip size="small" variant="outlined" label={label} color={color} />}
+      >
+        <Stack spacing={1} sx={{ pt: 1 }}>
+          <LeanBar signal={signal} />
+          <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+            <Typography variant="caption" color="text.secondary">
+              Human
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {`Score ${signal.score.toFixed(2)} · weight ${formatPercent(signal.weight)}`}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              AI
+            </Typography>
+          </Stack>
+          {signal.detail && (
+            <Typography variant="body2" color="text.secondary">
+              {signal.detail}
+            </Typography>
+          )}
+          {signal.evidence.some((link) => isWebUrl(link.url)) && (
+            <Stack component="ul" spacing={0.5} sx={{ listStyle: 'none', p: 0, m: 0 }}>
+              {signal.evidence.filter((link) => isWebUrl(link.url)).map((link) => (
+                <Stack
+                  component="li"
+                  key={link.url}
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center', minWidth: 0 }}
+                >
+                  <Chip size="small" label={STANCES[link.stance].label} color={STANCES[link.stance].color} />
+                  <Link href={link.url} target="_blank" rel="noopener noreferrer" variant="body2" noWrap>
+                    {link.title ?? link.url}
+                  </Link>
+                </Stack>
+              ))}
             </Stack>
-          ))}
+          )}
         </Stack>
-      )}
+      </CollapsibleSection>
     </Stack>
   );
 }
@@ -131,11 +128,11 @@ function SignalBreakdown({ signals }: { signals: Signal[] }) {
           No detection signals were available for this track.
         </Typography>
       ) : (
-        <Box component="ul" aria-label="Signals" sx={{ listStyle: 'none', p: 0, m: 0 }}>
+        <Stack component="ul" aria-label="Signals" spacing={1.5} sx={{ listStyle: 'none', p: 0, m: 0, pt: 1 }}>
           {ordered.map((signal) => (
             <SignalItem key={signal.name} signal={signal} />
           ))}
-        </Box>
+        </Stack>
       )}
     </Stack>
   );

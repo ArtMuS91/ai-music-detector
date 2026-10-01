@@ -1,4 +1,5 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import SignalBreakdown from './SignalBreakdown';
 import { signal } from '../test/mockApi';
@@ -74,6 +75,25 @@ describe('SignalBreakdown', () => {
     expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
       'https://example.com/story',
     ]);
+  });
+
+  it("hides one signal's details without touching the others", async () => {
+    const user = userEvent.setup();
+    render(
+      <SignalBreakdown
+        signals={[
+          signal({ name: 'Generator fingerprint', detail: 'Model probability 0.97.' }),
+          signal({ name: 'Web research', detail: 'Reported as an AI band.' }),
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Generator fingerprint' }));
+
+    await waitFor(() => expect(screen.queryByText('Model probability 0.97.')).not.toBeInTheDocument());
+    expect(screen.getByText('Reported as an AI band.')).toBeInTheDocument();
+    // The lean stays visible on a collapsed signal.
+    expect(screen.getAllByText('Leans AI')).toHaveLength(2);
   });
 
   it('says so when there are no signals', () => {

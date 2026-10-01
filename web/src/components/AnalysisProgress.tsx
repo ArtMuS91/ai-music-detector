@@ -6,7 +6,7 @@ import type { AnalysisStatus } from '../models';
 const STEPS: { status: AnalysisStatus; label: string }[] = [
   { status: 'Pending', label: 'Queue' },
   { status: 'Acquiring', label: 'Download' },
-  { status: 'Preprocessing', label: 'Preprocess' },
+  { status: 'Preprocessing', label: 'Prepare' },
   { status: 'Analyzing', label: 'Analyze' },
   { status: 'Completed', label: 'Result' },
 ];
@@ -29,7 +29,13 @@ function AnalysisProgress({ status, failedStage }: AnalysisProgressProps) {
   const done = status === 'Completed';
 
   return (
-    <Stepper activeStep={done ? STEPS.length : activeStep} alternativeLabel aria-label="Analysis progress">
+    <Stepper
+      activeStep={done ? STEPS.length : activeStep}
+      alternativeLabel
+      aria-label="Analysis progress"
+      // Five labels share a phone-width row; the default size runs neighbours together.
+      sx={{ '& .MuiStepLabel-label': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
+    >
       {STEPS.map((step, index) => (
         <Step key={step.status}>
           <StepLabel error={status === 'Failed' && index === activeStep}>{step.label}</StepLabel>

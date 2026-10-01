@@ -7,13 +7,6 @@ import { job, json, mockApi, networkError, result, visualization } from './test/
 const VIDEO_URL = 'https://music.youtube.com/watch?v=jNQXAC9IVRw';
 const POLL_INTERVAL_MS = 1500;
 
-const online = { 'GET /health': () => json({ status: 'ok' }) };
-
-async function renderOnline() {
-  render(<App />);
-  expect(await screen.findByText('API: online')).toBeInTheDocument();
-}
-
 function urlInput() {
   return screen.getByRole('textbox', { name: 'YouTube URL' });
 }
@@ -24,38 +17,23 @@ function analyzeButton() {
 
 describe('App', () => {
   it('suggests a YouTube Music link as the placeholder', () => {
-    mockApi(online);
+    mockApi({});
     render(<App />);
 
     expect(urlInput()).toHaveAttribute('placeholder', 'https://music.youtube.com/watch?v=');
   });
 
-  it('keeps Analyze disabled while the API is offline, even with a url entered', async () => {
-    mockApi({ 'GET /health': networkError });
-    const user = userEvent.setup();
+  it('explains how the analysis works beside the form', () => {
+    mockApi({});
     render(<App />);
 
-    expect(await screen.findByText('API: offline')).toBeInTheDocument();
-    await user.type(urlInput(), VIDEO_URL);
-
-    expect(analyzeButton()).toBeDisabled();
+    expect(screen.getByRole('complementary', { name: 'How it works' })).toBeInTheDocument();
   });
 
-  it('does not submit on Enter while the API is offline', async () => {
-    const fetchMock = mockApi({ 'GET /health': networkError });
+  it('enables Analyze once a url is entered', async () => {
+    mockApi({});
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText('API: offline');
-
-    await user.type(urlInput(), `${VIDEO_URL}{Enter}`);
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('enables Analyze only once the API is online and a url is entered', async () => {
-    mockApi(online);
-    const user = userEvent.setup();
-    await renderOnline();
 
     expect(analyzeButton()).toBeDisabled();
 
@@ -64,14 +42,81 @@ describe('App', () => {
     expect(analyzeButton()).toBeEnabled();
   });
 
+  it('does not submit an empty url on Enter', async () => {
+    const fetchMock = mockApi({});
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(urlInput(), '{Enter}');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('analyzes the link given in the address as soon as the page opens', async () => {
+    window.history.replaceState(null, '', `/?url=${encodeURIComponent(VIDEO_URL)}`);
+    const fetchMock = mockApi({
+      'POST /api/analyze': () => json(job({ status: 'Completed', result: result() }), 200),
+    });
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'AI-generated' })).toBeInTheDocument();
+    expect(urlInput()).toHaveValue(VIDEO_URL);
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({ url: VIDEO_URL });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('puts the submitted link into the address, so the page can be shared', async () => {
+    mockApi({ 'POST /api/analyze': () => json(job(), 202) });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(urlInput(), `  ${VIDEO_URL}  {Enter}`);
+    await screen.findByText('Queued');
+
+    expect(new URLSearchParams(window.location.search).get('url')).toBe(VIDEO_URL);
+  });
+
+  it('has no API status badge', () => {
+    mockApi({});
+    render(<App />);
+
+    expect(screen.queryByText(/^API:/)).not.toBeInTheDocument();
+  });
+
+  it('says so when the API cannot be reached', async () => {
+    mockApi({ 'POST /api/analyze': networkError });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(urlInput(), `${VIDEO_URL}{Enter}`);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach the API');
+  });
+
+  it('shows the stored result of an already analyzed link at once, without polling', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = mockApi({
+      'POST /api/analyze': () =>
+        json(job({ status: 'Completed', updatedAt: '2026-09-30T18:45:00Z', result: result() }), 200),
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<App />);
+
+    await user.type(urlInput(), `${VIDEO_URL}{Enter}`);
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'AI-generated' })).toBeInTheDocument();
+    expect(screen.getByText(/^Result from /)).toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 3));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('shows the server validation message for a rejected url', async () => {
     mockApi({
-      ...online,
       'POST /api/analyze': () =>
         json({ errors: { Url: ['Not a YouTube or YouTube Music video link.'] } }, 400),
     });
     const user = userEvent.setup();
-    await renderOnline();
+    render(<App />);
 
     await user.type(urlInput(), 'https://vimeo.com/123');
     await user.click(analyzeButton());
@@ -83,12 +128,11 @@ describe('App', () => {
 
   it('clears the url error once the url is edited', async () => {
     mockApi({
-      ...online,
       'POST /api/analyze': () =>
         json({ errors: { Url: ['Not a YouTube or YouTube Music video link.'] } }, 400),
     });
     const user = userEvent.setup();
-    await renderOnline();
+    render(<App />);
     await user.type(urlInput(), 'https://vimeo.com/123{Enter}');
     await screen.findByText('Not a YouTube or YouTube Music video link.');
 
@@ -99,9 +143,9 @@ describe('App', () => {
   });
 
   it('submits on Enter and shows the queued job', async () => {
-    mockApi({ ...online, 'POST /api/analyze': () => json(job(), 202) });
+    mockApi({ 'POST /api/analyze': () => json(job(), 202) });
     const user = userEvent.setup();
-    await renderOnline();
+    render(<App />);
 
     await user.type(urlInput(), `${VIDEO_URL}{Enter}`);
 
@@ -112,7 +156,6 @@ describe('App', () => {
   it('polls the job and shows the acquired track', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockApi({
-      ...online,
       'POST /api/analyze': () => json(job(), 202),
       'GET /api/analyze/job-1': () =>
         json(
@@ -123,7 +166,7 @@ describe('App', () => {
         ),
     });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await renderOnline();
+    render(<App />);
 
     await user.type(urlInput(), VIDEO_URL);
     await user.click(analyzeButton());
@@ -139,7 +182,6 @@ describe('App', () => {
   it('shows the failure reason and stops the progress bar when a job fails', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockApi({
-      ...online,
       'POST /api/analyze': () => json(job(), 202),
       'GET /api/analyze/job-1': () =>
         json(
@@ -151,7 +193,7 @@ describe('App', () => {
         ),
     });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await renderOnline();
+    render(<App />);
 
     await user.type(urlInput(), VIDEO_URL);
     await user.click(analyzeButton());
@@ -170,19 +212,18 @@ describe('App', () => {
   it('shows the verdict, audio and signals once the job completes', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockApi({
-      ...online,
       'POST /api/analyze': () => json(job(), 202),
       'GET /api/analyze/job-1': () =>
         json(job({ status: 'Completed', result: result(), visualization: visualization() })),
     });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await renderOnline();
+    render(<App />);
 
     await user.type(urlInput(), `${VIDEO_URL}{Enter}`);
     await screen.findByText('Queued');
     await act(() => vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS));
 
-    expect(await screen.findByText('AI-generated')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'AI-generated' })).toBeInTheDocument();
     expect(screen.getByRole('meter', { name: 'Confidence' })).toHaveAttribute('aria-valuenow', '74');
     expect(screen.getByRole('img', { name: 'Spectrogram of the analyzed excerpt' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Generator fingerprint' })).toBeInTheDocument();
@@ -192,12 +233,11 @@ describe('App', () => {
   it('shows the audio while the detectors are still running', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockApi({
-      ...online,
       'POST /api/analyze': () => json(job(), 202),
       'GET /api/analyze/job-1': () => json(job({ status: 'Analyzing', visualization: visualization() })),
     });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await renderOnline();
+    render(<App />);
 
     await user.type(urlInput(), `${VIDEO_URL}{Enter}`);
     await screen.findByText('Queued');
@@ -205,14 +245,13 @@ describe('App', () => {
 
     expect(await screen.findByRole('img', { name: 'Waveform of the analyzed excerpt' })).toBeInTheDocument();
     expect(screen.getByText('Running detectors')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Verdict' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('meter', { name: 'Confidence' })).not.toBeInTheDocument();
   });
 
   it('warns about a failed poll and keeps polling until it recovers', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let polls = 0;
     mockApi({
-      ...online,
       'POST /api/analyze': () => json(job(), 202),
       'GET /api/analyze/job-1': () => {
         polls++;
@@ -220,7 +259,7 @@ describe('App', () => {
       },
     });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await renderOnline();
+    render(<App />);
 
     await user.type(urlInput(), `${VIDEO_URL}{Enter}`);
     await screen.findByText('Queued');
@@ -237,12 +276,11 @@ describe('App', () => {
   it('stops polling and says so when the job no longer exists', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const fetchMock = mockApi({
-      ...online,
       'POST /api/analyze': () => json(job(), 202),
       'GET /api/analyze/job-1': () => json({}, 404),
     });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await renderOnline();
+    render(<App />);
 
     await user.type(urlInput(), `${VIDEO_URL}{Enter}`);
     await screen.findByText('Queued');

@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -59,59 +58,21 @@ public sealed class GroqWebResearchSignalProvider(
 
     public async Task<Signal> DetectAsync(PreprocessedAudio audio, Track track, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_options.ApiKey))
-        {
-            throw new WebResearchException("Groq:ApiKey is not configured.");
-        }
-
         if (string.IsNullOrWhiteSpace(track.Title))
         {
             return new Signal(Name, Score: 0.5, Weight: 0, Detail: "The track has no title to search for.");
         }
 
-        for (var attempt = 1; ; attempt++)
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Post, "chat/completions")
-            {
-                Content = JsonContent.Create(BuildRequest(track)),
-            };
-            request.Headers.Authorization = new("Bearer", _options.ApiKey);
+        var body = await GroqRequests.PostAsync(
+            http,
+            _options,
+            "chat/completions",
+            () => JsonContent.Create(BuildRequest(track)),
+            message => new WebResearchException(message),
+            logger,
+            cancellationToken);
 
-            using var response = await http.SendAsync(request, cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            if (response.IsSuccessStatusCode)
-            {
-                return ParseResponse(body);
-            }
-
-            if (IsTransient(response, body) && attempt < _options.MaxAttempts)
-            {
-                var delay = RetryDelay(response);
-                logger.LogInformation("Groq returned {StatusCode}; retrying in {Delay}.", (int)response.StatusCode, delay);
-                await Task.Delay(delay, cancellationToken);
-                continue;
-            }
-
-            logger.LogWarning("Groq returned {StatusCode}: {Body}", (int)response.StatusCode, body);
-            throw new WebResearchException($"Groq request failed with status {(int)response.StatusCode}.");
-        }
-    }
-
-    /// <summary>
-    /// 429: the free tier's tokens-per-minute cap is smaller than two browser-search calls, so
-    /// back-to-back jobs routinely hit it; the window reopens within seconds.
-    /// 400 tool_use_failed: the model occasionally emits a malformed tool call; a fresh
-    /// generation usually doesn't.
-    /// </summary>
-    private static bool IsTransient(HttpResponseMessage response, string body)
-        => response.StatusCode == HttpStatusCode.TooManyRequests
-            || (response.StatusCode == HttpStatusCode.BadRequest && body.Contains("\"tool_use_failed\"", StringComparison.Ordinal));
-
-    private static TimeSpan RetryDelay(HttpResponseMessage response)
-    {
-        var suggested = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(10);
-        return TimeSpan.FromSeconds(Math.Clamp(suggested.TotalSeconds + 1, 1, 60));
+        return ParseResponse(body);
     }
 
     private object BuildRequest(Track track) => new

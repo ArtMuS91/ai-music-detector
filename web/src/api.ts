@@ -8,21 +8,22 @@ export class InvalidUrlError extends Error {}
 /** The job does not exist (any more), so polling it again cannot help. */
 export class JobNotFoundError extends Error {}
 
-export async function checkHealth(): Promise<boolean> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/health`);
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
+/**
+ * Submits a link. A video that was already analyzed comes back completed (200) with its earlier
+ * result; otherwise the job is queued (202) and must be polled.
+ */
 export async function submitAnalysis(url: string): Promise<AnalysisJob> {
-  const response = await fetch(`${API_BASE_URL}/api/analyze`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+  } catch {
+    // fetch only rejects when no response arrived at all: the API is down or unreachable.
+    throw new Error('Could not reach the API. Check that it is running and try again.');
+  }
 
   if (response.status === 400) {
     const problem = await response.json();

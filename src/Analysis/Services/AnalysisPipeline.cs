@@ -12,6 +12,9 @@ public sealed class AnalysisPipeline(
     IAudioPreprocessor preprocessor,
     IAudioVisualizer visualizer,
     IEnumerable<IDetectionSignalProvider> signalProviders,
+    ISignalAggregator aggregator,
+    ILyricsTranscriber lyricsTranscriber,
+    IResultExplainer explainer,
     ILogger<AnalysisPipeline> logger) : IAnalysisPipeline
 {
     public async Task RunAsync(AnalysisJobEntity job, CancellationToken cancellationToken = default)
@@ -36,11 +39,20 @@ public sealed class AnalysisPipeline(
                 preprocessed.Channels);
 
             // Saved with the move to Analyzing, so the client can show it while the detectors run.
-            job.Visualization = await TryVisualizeAsync(job, preprocessed, cancellationToken);
+            job.Visualization = await TryOptionalAsync(
+                job, "visualize the audio", () => visualizer.VisualizeAsync(preprocessed, cancellationToken), cancellationToken);
             await AdvanceAsync(job, AnalysisStatus.Analyzing, cancellationToken);
             var signals = await CollectSignalsAsync(preprocessed, acquired.Track, cancellationToken);
+            var result = aggregator.Aggregate(signals);
 
-            job.Result = UnaggregatedResult(signals);
+            // The verdict is settled above; lyrics and the AI-written explanation only word it,
+            // so without them the result keeps the aggregator's own summary.
+            var lyrics = await TryOptionalAsync(
+                job, "transcribe lyrics", () => lyricsTranscriber.TranscribeAsync(preprocessed, cancellationToken), cancellationToken);
+            var explanation = await TryOptionalAsync(
+                job, "explain the result", () => explainer.ExplainAsync(acquired.Track, result, lyrics, cancellationToken), cancellationToken);
+
+            job.Result = explanation is null ? result : result with { Explanation = explanation };
             job.Status = AnalysisStatus.Completed;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -116,35 +128,27 @@ public sealed class AnalysisPipeline(
         return signals;
     }
 
-    /// <summary>The pictures are a nice-to-have: without them the result page just shows less.</summary>
-    private async Task<AudioVisualization?> TryVisualizeAsync(
+    /// <summary>
+    /// For steps the result can do without (pictures, lyrics, the AI-written explanation): a
+    /// failure is logged and costs only that step's output.
+    /// </summary>
+    private async Task<T?> TryOptionalAsync<T>(
         AnalysisJobEntity job,
-        PreprocessedAudio audio,
+        string step,
+        Func<Task<T>> run,
         CancellationToken cancellationToken)
+        where T : class?
     {
         try
         {
-            return await visualizer.VisualizeAsync(audio, cancellationToken);
+            return await run();
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            logger.LogWarning(ex, "Could not visualize the audio of job {JobId}; continuing without it.", job.Id);
+            logger.LogWarning(ex, "Could not {Step} for job {JobId}; continuing without it.", step, job.Id);
             return null;
         }
     }
-
-    /// <summary>
-    /// Stand-in until aggregation (Phase 4) exists: signals are kept for display, but the
-    /// verdict stays inconclusive rather than guessing how to weigh them.
-    /// </summary>
-    private static AnalysisResult UnaggregatedResult(IReadOnlyList<Signal> signals) => new(
-        AnalysisVerdict.Inconclusive,
-        AiProbability: 0.5,
-        Confidence: 0,
-        signals,
-        Explanation: signals.Count == 0
-            ? "No detection signals are available, so no verdict could be reached."
-            : "Signals were collected, but combining them into a verdict is not implemented yet.");
 
     private async Task AdvanceAsync(AnalysisJobEntity job, AnalysisStatus status, CancellationToken cancellationToken)
     {

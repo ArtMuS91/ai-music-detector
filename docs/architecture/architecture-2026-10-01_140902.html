@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Music Detector — Architecture (2026-10-01 14:09:02)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f4f5f8;
+    --card: #ffffff;
+    --text: #111827;
+    --muted: #5b6475;
+    --border: #e3e6ec;
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 6px 20px rgba(16, 24, 40, 0.06);
+    --radius: 14px;
+
+    --pres: #2563eb;      --pres-tint: #e6eefe;
+    --app: #7c3aed;       --app-tint: #efe8fe;
+    --data: #0d9488;      --data-tint: #e0f5f2;
+    --ext: #d97706;       --ext-tint: #fdf1de;
+    --plan: #6b7280;      --plan-tint: #eef0f3;
+
+    --ok: #16a34a;        --ok-tint: #e3f6e9;
+    --warn: #d97706;      --warn-tint: #fdf1de;
+    --off: #6b7280;       --off-tint: #eef0f3;
+
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+    --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1017;
+      --card: #161a23;
+      --text: #e7eaf0;
+      --muted: #9aa3b5;
+      --border: #272d3a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+
+      --pres: #6ea0ff;      --pres-tint: #17233d;
+      --app: #b18cff;       --app-tint: #251a3d;
+      --data: #3cc9b9;      --data-tint: #0f2a28;
+      --ext: #f5b14a;       --ext-tint: #33240d;
+      --plan: #9aa3b5;      --plan-tint: #222733;
+
+      --ok: #4ade80;        --ok-tint: #12301c;
+      --warn: #f5b14a;      --warn-tint: #33240d;
+      --off: #9aa3b5;       --off-tint: #222733;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  code, .mono { font-family: var(--mono); font-size: 0.88em; }
+  code { background: var(--plan-tint); padding: 1px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+
+  .container { width: min(1800px, 100% - 48px); margin: 0 auto; padding: 32px 0 64px; }
+  @media (max-width: 600px) { .container { width: calc(100% - 32px); padding-top: 16px; } }
+
+  section { margin-top: 36px; }
+  h2 { font-size: 1.3rem; font-weight: 700; margin: 0 0 14px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 10px; }
+  h2 .num { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 9px; }
+  h3 { font-size: 1.02rem; margin: 0; font-weight: 700; }
+  .lead { color: var(--muted); margin: -6px 0 16px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px;
+    min-width: 0;
+  }
+
+  /* Hero */
+  .hero {
+    background:
+      radial-gradient(ellipse 50% 90% at 0% 0%, color-mix(in srgb, var(--pres) 16%, transparent), transparent 70%),
+      radial-gradient(ellipse 45% 90% at 60% 0%, color-mix(in srgb, var(--app) 14%, transparent), transparent 70%),
+      radial-gradient(ellipse 40% 90% at 100% 0%, color-mix(in srgb, var(--data) 16%, transparent), transparent 70%),
+      var(--card);
+    padding: 32px;
+  }
+  .hero h1 { margin: 0 0 8px; font-size: clamp(1.6rem, 3.4vw, 2.4rem); letter-spacing: -0.02em; font-weight: 800; }
+  .hero .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .hero p { margin: 0; color: var(--muted); max-width: 900px; font-size: 1.05rem; }
+
+  /* Badges, chips, pills */
+  .badge, .chip, .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+    padding: 3px 10px; border: 1px solid transparent; white-space: nowrap;
+  }
+  .badge { background: var(--plan-tint); color: var(--muted); border-color: var(--border); }
+  .badge.pres { background: var(--pres-tint); color: var(--pres); border-color: color-mix(in srgb, var(--pres) 30%, transparent); }
+  .badge.app { background: var(--app-tint); color: var(--app); border-color: color-mix(in srgb, var(--app) 30%, transparent); }
+  .badge.data { background: var(--data-tint); color: var(--data); border-color: color-mix(in srgb, var(--data) 30%, transparent); }
+  .badge.ext { background: var(--ext-tint); color: var(--ext); border-color: color-mix(in srgb, var(--ext) 30%, transparent); }
+  .badge.plan { background: transparent; color: var(--plan); border: 1px dashed var(--plan); }
+  .chip { font-family: var(--mono); font-weight: 500; font-size: 0.76rem; border-radius: 8px; background: var(--card); border: 1px solid var(--border); color: var(--text); white-space: normal; overflow-wrap: anywhere; }
+  .chip.new { border-color: var(--warn); }
+  .pill { text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.68rem; }
+  .pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.ok { background: var(--ok-tint); color: var(--ok); }
+  .pill.partial { background: var(--warn-tint); color: var(--warn); }
+  .pill.off { background: var(--off-tint); color: var(--off); }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+  .stat { padding: 18px 20px; position: relative; overflow: hidden; }
+  .stat::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--accent, var(--app)); }
+  .stat .value { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+  .stat .value small { font-size: 0.95rem; color: var(--muted); font-weight: 600; }
+  .stat .label { font-weight: 600; margin-top: 4px; }
+  .stat .sub { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+
+  /* Diagram cards */
+  .diagram-card { padding: 0; overflow: hidden; }
+  .diagram-head { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+  .diagram-head h3 { flex: 1; }
+  .expand, .viewer-bar button {
+    font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 12px;
+  }
+  .expand:hover, .viewer-bar button:hover { border-color: var(--app); color: var(--app); }
+  .diagram { cursor: zoom-in; padding: 20px; overflow: hidden; }
+  .diagram pre.mermaid { margin: 0; background: transparent; font-family: var(--sans); visibility: hidden; }
+  .diagram pre.mermaid[data-processed] { visibility: visible; }
+  .diagram svg { display: block; width: 100%; height: auto; max-width: none; max-height: 85vh; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 20px 16px; }
+
+  /* Tier cards */
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); margin-top: 16px; }
+  .tier { border-top: 4px solid var(--tc); }
+  .tier h3 { color: var(--tc); margin-bottom: 4px; }
+  .tier .proj { color: var(--muted); font-size: 0.82rem; margin-bottom: 12px; }
+  .tier .label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 14px 0 6px; }
+  .facts { margin: 0; padding-left: 18px; }
+  .facts li { margin: 4px 0; font-size: 0.9rem; }
+  .facts li::marker { color: var(--tc, var(--muted)); }
+  .t-pres { --tc: var(--pres); }
+  .t-app { --tc: var(--app); }
+  .t-data { --tc: var(--data); }
+
+  /* Lifecycle */
+  .split { display: grid; gap: 16px; grid-template-columns: minmax(0, 2.2fr) minmax(min(100%, 300px), 1fr); }
+  @media (max-width: 1000px) { .split { grid-template-columns: 1fr; } }
+  .notes { display: grid; gap: 12px; align-content: start; }
+  .note { padding: 14px 16px; border-left: 4px solid var(--nc, var(--app)); }
+  .note b { display: block; font-size: 0.9rem; margin-bottom: 2px; }
+  .note span { font-size: 0.86rem; color: var(--muted); }
+
+  /* Signals */
+  .signal { display: flex; flex-direction: column; gap: 10px; }
+  .signal .top { display: flex; align-items: flex-start; gap: 10px; justify-content: space-between; }
+  .signal .cls { font-family: var(--mono); font-size: 0.76rem; color: var(--muted); overflow-wrap: anywhere; }
+  .signal p { margin: 0; font-size: 0.9rem; }
+  .signal.agg { background: linear-gradient(135deg, var(--app-tint), var(--card) 70%); }
+  .signal.planned { border: 1px dashed var(--plan); box-shadow: none; }
+
+  /* CI */
+  .ci { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); margin-top: 16px; }
+  .ci .card { padding: 16px; }
+  .ci h3 { font-size: 0.95rem; margin-bottom: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .steps { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .steps .arrow { color: var(--muted); font-size: 0.8rem; }
+
+  /* Roadmap */
+  .timeline { display: flex; flex-wrap: wrap; gap: 0; position: relative; }
+  .phase { flex: 1 1 260px; position: relative; padding: 0 12px 16px 0; }
+  .phase .dot-line { display: flex; align-items: center; margin-bottom: 12px; }
+  .phase .dot { width: 22px; height: 22px; border-radius: 50%; background: var(--sc); box-shadow: 0 0 0 5px color-mix(in srgb, var(--sc) 22%, transparent); flex: none; }
+  .phase .line { flex: 1; height: 3px; background: var(--border); margin-left: 10px; border-radius: 2px; }
+  .phase:last-child .line { background: repeating-linear-gradient(90deg, var(--border) 0 8px, transparent 8px 14px); }
+  .phase .card { padding: 16px; height: calc(100% - 34px); }
+  .phase h3 { margin-bottom: 6px; }
+  .phase p { margin: 8px 0 0; font-size: 0.88rem; color: var(--muted); }
+  .phase.done { --sc: var(--ok); }
+  .phase.partial { --sc: var(--warn); }
+  .phase.off { --sc: var(--off); }
+  .phase.off .dot { background: transparent; border: 3px dashed var(--off); box-shadow: none; }
+  .now { font-size: 0.72rem; font-weight: 700; color: var(--app); margin-left: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  footer { margin-top: 40px; color: var(--muted); font-size: 0.8rem; text-align: center; }
+
+  /* Viewer */
+  .viewer { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; flex-direction: column; }
+  .viewer[hidden] { display: none; }
+  .viewer-bar { display: flex; gap: 8px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--card); }
+  .viewer-title { flex: 1; font-weight: 600; }
+  .viewer-stage { flex: 1; overflow: hidden; cursor: grab; touch-action: none; position: relative; }
+  .viewer-stage.dragging { cursor: grabbing; }
+  .viewer-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .viewer-canvas svg { max-width: none !important; display: block; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- 1. Hero -->
+  <header class="card hero">
+    <div class="meta">
+      <span class="badge ok pill">MVP complete</span>
+      <span class="badge plan">Next: Spotify links · audio upload</span>
+      <span class="badge">Generated 2026-10-01 14:09:02 (local time)</span>
+      <span class="badge mono">branch feat/result-ui-polish</span>
+    </div>
+    <h1>AI Music Detector — Architecture</h1>
+    <p>A pasted YouTube / YouTube Music link is queued, downloaded with yt-dlp, normalized with ffmpeg, scored by independent detection signals, aggregated by rules into a verdict, and explained by Groq for a React UI that polls the job.</p>
+  </header>
+
+  <!-- 2. At a glance -->
+  <section>
+    <h2><span class="num">01</span>At a glance</h2>
+    <div class="stats">
+      <div class="card stat" style="--accent: var(--app)">
+        <div class="value">3 <small>+ 2 dev-only</small></div>
+        <div class="label">API endpoints</div>
+        <div class="sub"><span class="mono">/api/analyze</span> ×2, <span class="mono">/health</span>; OpenAPI + Scalar in Development</div>
+      </div>
+      <div class="card stat" style="--accent: var(--data)">
+        <div class="value">1 <small>table · 3 jsonb</small></div>
+        <div class="label">Database</div>
+        <div class="sub"><span class="mono">analysis_jobs</span>, 4 migrations</div>
+      </div>
+      <div class="card stat" style="--accent: var(--app)">
+        <div class="value">3 <small>/ 0 planned</small></div>
+        <div class="label">Signal providers</div>
+        <div class="sub">metadata, web research, ML fakeprint</div>
+      </div>
+      <div class="card stat" style="--accent: var(--app)">
+        <div class="value">6</div>
+        <div class="label">Job states</div>
+        <div class="sub"><span class="mono">AnalysisStatus</span> enum</div>
+      </div>
+      <div class="card stat" style="--accent: var(--data)">
+        <div class="value">85 <small>+ 22 py</small></div>
+        <div class="label">Backend tests</div>
+        <div class="sub">xUnit Fact/Theory methods in <span class="mono">Core.Tests</span>; pytest in <span class="mono">ml/tests</span></div>
+      </div>
+      <div class="card stat" style="--accent: var(--pres)">
+        <div class="value">78</div>
+        <div class="label">Web tests</div>
+        <div class="sub">Vitest across 11 test files</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. 3-tier overview -->
+  <section>
+    <h2><span class="num">02</span>3-tier overview</h2>
+    <section class="card diagram-card" data-title="3-tier overview" style="margin-top:0">
+      <div class="diagram-head"><h3>Request, queue and pipeline flow</h3><button class="expand">⤢ Expand</button></div>
+      <div class="diagram"><pre class="mermaid">
+flowchart TB
+  subgraph pres["Presentation · web/"]
+    direction LR
+    spa["React SPA&lt;br/&gt;App + components"]
+    apits["api.ts&lt;br/&gt;polls every 1.5 s"]
+    proxy["Vite dev proxy&lt;br/&gt;/api"]
+    upload["Audio file upload&lt;br/&gt;planned"]
+  end
+
+  subgraph app["Application · Api + Analysis"]
+    endpoints["AnalysisEndpoints&lt;br/&gt;minimal API"]
+    service["AnalysisService"]
+    worker["AnalysisWorker&lt;br/&gt;hosted service"]
+    pipeline["AnalysisPipeline"]
+    meta["Metadata clues&lt;br/&gt;MetadataHeuristics"]
+    webres["Web research&lt;br/&gt;GroqWebResearch"]
+    mlsig["ML detector&lt;br/&gt;fakeprint"]
+    agg["WeightedSignalAggregator"]
+    explain["Lyrics + Explainer&lt;br/&gt;optional"]
+  end
+
+  subgraph data["Data &amp; integration · Infrastructure + ml/"]
+    pg[("PostgreSQL 17&lt;br/&gt;analysis_jobs")]
+    tmp[("Temp audio&lt;br/&gt;deleted after job")]
+    ytdlp["yt-dlp&lt;br/&gt;bestaudio"]
+    ffmpeg["ffmpeg&lt;br/&gt;mono PCM WAV"]
+    ml["ML service&lt;br/&gt;FastAPI"]
+    groq["Groq API&lt;br/&gt;gpt-oss + Whisper"]
+    yt["YouTube"]
+    spotify["Spotify&lt;br/&gt;planned"]
+  end
+
+  spa --> apits
+  apits -->|"POST /api/analyze&lt;br/&gt;GET /api/analyze/{id}"| endpoints
+  apits -->|"same-origin /api"| proxy
+  proxy -->|"VITE_API_PROXY_TARGET"| endpoints
+  endpoints --> service
+  service -->|"insert job / reuse Completed"| pg
+  worker -->|"claims job (SKIP LOCKED)"| pg
+  worker -->|"RunAsync"| pipeline
+  pipeline -->|"acquire"| ytdlp
+  ytdlp --> yt
+  ytdlp -->|"download"| tmp
+  pipeline -->|"preprocess"| ffmpeg
+  ffmpeg -->|"WAV window"| tmp
+  pipeline -->|"POST /visualize"| ml
+  pipeline --> meta
+  pipeline --> webres
+  pipeline --> mlsig
+  mlsig -->|"POST /detect/fakeprint"| ml
+  webres -->|"browser_search"| groq
+  pipeline --> agg
+  pipeline --> explain
+  explain -->|"Whisper + chat"| groq
+  pipeline -->|"status + result jsonb"| pg
+
+  spa -.-> upload
+  upload -.->|"planned"| endpoints
+  pipeline -.->|"planned source"| spotify
+
+  classDef presC fill:#dbe7fe,stroke:#2563eb,stroke-width:1.5px,color:#0f172a
+  classDef appC fill:#ece3fe,stroke:#7c3aed,stroke-width:1.5px,color:#1e1033
+  classDef dataC fill:#d5f3ee,stroke:#0d9488,stroke-width:1.5px,color:#06302c
+  classDef extC fill:#fdecc8,stroke:#d97706,stroke-width:1.5px,color:#3a2304
+  classDef planC fill:#eef0f3,stroke:#6b7280,stroke-width:1.5px,stroke-dasharray:6 4,color:#374151
+  class spa,apits,proxy presC
+  class endpoints,service,worker,pipeline,meta,webres,mlsig,agg,explain appC
+  class pg,tmp,ytdlp,ffmpeg,ml dataC
+  class groq,yt extC
+  class upload,spotify planC
+</pre></div>
+      <div class="legend">
+        <span class="badge pres">Presentation</span>
+        <span class="badge app">Application</span>
+        <span class="badge data">Data &amp; integration</span>
+        <span class="badge ext">External service</span>
+        <span class="badge plan">Planned</span>
+      </div>
+    </section>
+
+    <div class="grid">
+      <div class="card tier t-pres">
+        <h3>Presentation</h3>
+        <div class="proj mono">web/ — Vite + React + TypeScript + MUI</div>
+        <div class="row">
+          <span class="badge pres">React 19.2</span>
+          <span class="badge pres">MUI 9.4</span>
+          <span class="badge pres">Vite 8.3</span>
+          <span class="badge pres">TypeScript 6.0</span>
+          <span class="badge pres">Vitest 4.1</span>
+          <span class="badge pres">oxlint 1.81</span>
+        </div>
+        <div class="label">Components</div>
+        <div class="row">
+          <span class="chip">App</span><span class="chip">JobCard</span><span class="chip">AnalysisProgress</span>
+          <span class="chip">VerdictSummary</span><span class="chip">SignalBreakdown</span><span class="chip">AudioVisuals</span>
+          <span class="chip">CollapsibleSection</span><span class="chip">HowItWorks</span><span class="chip">Meter</span>
+          <span class="chip new">ThemeToggle</span><span class="chip">YouTubeMusicIcon</span>
+        </div>
+        <div class="label">Key facts</div>
+        <ul class="facts">
+          <li><code>api.ts</code> calls <code>POST /api/analyze</code> then polls <code>GET /api/analyze/{id}</code> every 1500 ms until a terminal status.</li>
+          <li>Base URL from <code>VITE_API_BASE_URL</code>, default <code>http://localhost:5214</code>; empty means same-origin.</li>
+          <li><span class="badge partial pill">uncommitted</span> Vite proxies <code>/api</code> to <code>VITE_API_PROXY_TARGET</code> and allows <code>.devtunnels.ms</code>, so only port 5173 needs forwarding.</li>
+          <li><span class="badge partial pill">uncommitted</span> <code>ThemeToggle</code> uses MUI class-based color schemes; an inline script in <code>index.html</code> sets the class from <code>mui-mode</code> before first paint.</li>
+        </ul>
+      </div>
+
+      <div class="card tier t-app">
+        <h3>Application</h3>
+        <div class="proj mono">src/Api · src/Analysis · src/Core (interfaces)</div>
+        <div class="row">
+          <span class="badge app">.NET 10 (net10.0)</span>
+          <span class="badge app">ASP.NET Core minimal API</span>
+          <span class="badge app">OpenAPI 10.0.12</span>
+          <span class="badge app">Scalar 2.17.8</span>
+        </div>
+        <div class="label">Components</div>
+        <div class="row">
+          <span class="chip">AnalysisEndpoints</span><span class="chip">AnalysisService</span><span class="chip">AnalysisWorker</span>
+          <span class="chip">AnalysisPipeline</span><span class="chip">MetadataHeuristicsSignalProvider</span><span class="chip">WeightedSignalAggregator</span>
+        </div>
+        <div class="label">Routes</div>
+        <div class="row">
+          <span class="chip">POST /api/analyze → 202 · 200 · 400 · 429</span>
+          <span class="chip">GET /api/analyze/{id:guid} → 200 · 404</span>
+          <span class="chip">GET /health → 200</span>
+        </div>
+        <div class="label">Key facts</div>
+        <ul class="facts">
+          <li>Submit is rate-limited: fixed window, 10 per minute per remote IP.</li>
+          <li>CORS allows only <code>http://localhost:5173</code>.</li>
+          <li>One <code>AnalysisWorker</code>, one job at a time, 2 s idle delay; migrations run at startup.</li>
+          <li>Completed jobs for the same canonical URL are returned (200) instead of re-queued.</li>
+        </ul>
+      </div>
+
+      <div class="card tier t-data">
+        <h3>Data &amp; integration</h3>
+        <div class="proj mono">src/Infrastructure · ml/</div>
+        <div class="row">
+          <span class="badge data">Npgsql EF Core 10.0.3</span>
+          <span class="badge data">EFCore.NamingConventions 10.0.1</span>
+          <span class="badge data">postgres:17-alpine</span>
+          <span class="badge data">Python 3.12 · FastAPI</span>
+          <span class="badge ext">Groq</span>
+          <span class="badge ext">YouTube</span>
+        </div>
+        <div class="label">Components</div>
+        <div class="row">
+          <span class="chip">AnalysisDbContext</span><span class="chip">EfAnalysisJobRepository</span><span class="chip">YtDlpAudioAcquisitionService</span>
+          <span class="chip">FfmpegAudioPreprocessor</span><span class="chip">GroqWebResearchSignalProvider</span><span class="chip">GroqLyricsTranscriber</span>
+          <span class="chip">GroqResultExplainer</span><span class="chip">MlDetectionSignalProvider</span><span class="chip">MlAudioVisualizer</span>
+        </div>
+        <div class="label">Key facts</div>
+        <ul class="facts">
+          <li><code>analysis_jobs</code>: <code>track</code>, <code>result</code>, <code>visualization</code> as <code>jsonb</code>; indexes on (status, created_at) and (source_url, status).</li>
+          <li>yt-dlp <code>bestaudio</code>, no live, ≤ 15 min, ≤ 100 MB; ffmpeg to mono s16 WAV at 44.1 kHz, ≤ 3 min window.</li>
+          <li>Groq models: <code>openai/gpt-oss-120b</code> (research, explanation), <code>whisper-large-v3-turbo</code> (lyrics).</li>
+          <li>Migrations: InitialCreate, AddPreprocessedAudioPath, AddVisualizationAndFailedStage, AddSourceUrlStatusIndex.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Job lifecycle -->
+  <section>
+    <h2><span class="num">03</span>Job lifecycle</h2>
+    <div class="split">
+      <section class="card diagram-card" data-title="Job lifecycle (AnalysisStatus)" style="margin-top:0">
+        <div class="diagram-head"><h3><span class="mono">AnalysisStatus</span> state machine</h3><button class="expand">⤢ Expand</button></div>
+        <div class="diagram"><pre class="mermaid">
+stateDiagram-v2
+  direction LR
+  [*] --> Pending : POST /api/analyze
+  Pending --> Acquiring : ClaimNextPendingAsync SKIP LOCKED
+  Acquiring --> Preprocessing : audio downloaded
+  Preprocessing --> Analyzing : WAV ready, visualization saved
+  Analyzing --> Completed : signals aggregated, explained
+  Acquiring --> Failed : download error
+  Preprocessing --> Failed : decode error
+  Analyzing --> Failed : unexpected error or save failure
+  Acquiring --> Pending : startup recovery
+  Preprocessing --> Pending : startup recovery
+  Analyzing --> Pending : startup recovery
+  Completed --> [*]
+  Failed --> [*]
+
+  classDef queued fill:#ece3fe,stroke:#7c3aed,color:#1e1033
+  classDef running fill:#dbe7fe,stroke:#2563eb,color:#0f172a
+  classDef done fill:#d8f3e0,stroke:#16a34a,color:#0b2e17
+  classDef failed fill:#fde2e2,stroke:#dc2626,color:#3b0a0a
+  class Pending queued
+  class Acquiring,Preprocessing,Analyzing running
+  class Completed done
+  class Failed failed
+</pre></div>
+      </section>
+      <div class="notes">
+        <div class="card note" style="--nc: var(--data)"><b>Cleanup</b><span>Acquired and preprocessed audio files are deleted after every run and on recovery.</span></div>
+        <div class="card note" style="--nc: var(--app)"><b>Cancellation</b><span>Shutdown leaves the job in progress; <code>RecoverInterruptedAsync</code> resets it to <code>Pending</code> on next start.</span></div>
+        <div class="card note" style="--nc: var(--ext)"><b>Failure reason</b><span><code>UserFacingException</code> message or a stage-specific text, plus <code>FailedStage</code>; details stay in the log.</span></div>
+        <div class="card note" style="--nc: var(--pres)"><b>Save fallback</b><span>If the final update fails, the job is re-saved as <code>Failed</code> with result and visualization cleared, so polling ends.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Detection signals -->
+  <section>
+    <h2><span class="num">04</span>Detection signals</h2>
+    <p class="lead">Each <code>IDetectionSignalProvider</code> runs during <code>Analyzing</code>; one that throws is left out.</p>
+    <div class="grid">
+      <div class="card signal">
+        <div class="top"><h3>Metadata clues</h3><span class="pill ok">implemented</span></div>
+        <div class="cls">MetadataHeuristicsSignalProvider · Analysis</div>
+        <p>AI mentions or human-made claims in title, channel, tags and description; weight 0 when nothing is found.</p>
+        <div class="row"><span class="badge app">no external dependency</span></div>
+      </div>
+      <div class="card signal">
+        <div class="top"><h3>Web research</h3><span class="pill ok">implemented</span></div>
+        <div class="cls">GroqWebResearchSignalProvider · Infrastructure</div>
+        <p>Asks Groq with <code>browser_search</code> whether the track or artist is known AI; links kept only from <code>executed_tools</code>, unbacked claims capped at weight 0.3.</p>
+        <div class="row"><span class="badge ext">Groq gpt-oss-120b</span><span class="badge">GROQ_API_KEY</span></div>
+      </div>
+      <div class="card signal">
+        <div class="top"><h3>Generator fingerprint</h3><span class="pill ok">implemented</span></div>
+        <div class="cls">MlDetectionSignalProvider("fakeprint") → FakeprintDetector</div>
+        <p>Logistic regression over the spectral "fakeprint" left by generator decoders (Suno ≤ 5, Udio ≤ 1.5), weight 0.8.</p>
+        <div class="row"><span class="badge data">ML service · numpy / scipy</span><span class="badge">vendored weights.npz</span></div>
+      </div>
+      <div class="card signal planned">
+        <div class="top"><h3>Further signals</h3><span class="pill off">none planned</span></div>
+        <div class="cls">MlService:Detectors</div>
+        <p><code>ROADMAP.md</code> lists no new detectors; adding one means a new ML endpoint id in config.</p>
+        <div class="row"><span class="badge plan">not on roadmap</span></div>
+      </div>
+      <div class="card signal agg">
+        <div class="top"><h3>Aggregation</h3><span class="pill ok">implemented</span></div>
+        <div class="cls">WeightedSignalAggregator · Analysis</div>
+        <p>Rule-based weighted logit sum to <code>AiGenerated</code> / <code>Human</code> / <code>Mixed</code> / <code>Inconclusive</code> (decisive at 0.65); Groq only words the explanation afterwards.</p>
+        <div class="row"><span class="badge app">no model</span><span class="badge ext">Whisper lyrics + explainer optional</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Deployment -->
+  <section>
+    <h2><span class="num">05</span>Deployment</h2>
+    <section class="card diagram-card" data-title="Deployment (docker compose + dev web)" style="margin-top:0">
+      <div class="diagram-head"><h3><span class="mono">docker-compose.yml</span> and the dev web server</h3><button class="expand">⤢ Expand</button></div>
+      <div class="diagram"><pre class="mermaid">
+flowchart LR
+  browser["Browser"]
+  tunnel["Dev tunnel&lt;br/&gt;*.devtunnels.ms"]
+  vite["Vite dev server&lt;br/&gt;:5173"]
+  env[".env&lt;br/&gt;GROQ_API_KEY"]
+
+  subgraph compose["docker compose"]
+    api["api&lt;br/&gt;host 5214 → 8080"]
+    ml["ml&lt;br/&gt;127.0.0.1:8000"]
+    pg[("postgres&lt;br/&gt;host 5433 → 5432")]
+    vol[("volume&lt;br/&gt;postgres-data")]
+  end
+
+  groq["Groq API"]
+  yt["YouTube"]
+
+  browser -->|"local"| vite
+  browser -.->|"remote"| tunnel
+  tunnel --> vite
+  browser -->|"VITE_API_BASE_URL"| api
+  vite -->|"/api proxy"| api
+  env -->|"Groq__ApiKey"| api
+  api -->|"postgres:5432"| pg
+  pg --- vol
+  api -->|"http://ml:8000/"| ml
+  api -->|"HTTPS"| groq
+  api -->|"yt-dlp"| yt
+
+  classDef presC fill:#dbe7fe,stroke:#2563eb,stroke-width:1.5px,color:#0f172a
+  classDef appC fill:#ece3fe,stroke:#7c3aed,stroke-width:1.5px,color:#1e1033
+  classDef dataC fill:#d5f3ee,stroke:#0d9488,stroke-width:1.5px,color:#06302c
+  classDef extC fill:#fdecc8,stroke:#d97706,stroke-width:1.5px,color:#3a2304
+  classDef secretC fill:#eef0f3,stroke:#6b7280,stroke-width:1.5px,color:#1f2937
+  class browser,vite,tunnel presC
+  class api appC
+  class ml,pg,vol dataC
+  class groq,yt extC
+  class env secretC
+</pre></div>
+      <div class="legend">
+        <span class="badge app">api: aspnet:10.0 + apt ffmpeg + yt-dlp_linux</span>
+        <span class="badge data">ml: python:3.12-slim</span>
+        <span class="badge data">postgres:17-alpine, healthcheck pg_isready</span>
+        <span class="badge">api waits for postgres + ml healthy</span>
+        <span class="badge">ASPNETCORE_ENVIRONMENT=Development in compose</span>
+      </div>
+    </section>
+
+    <div class="ci">
+      <div class="card">
+        <h3>CI · <span class="mono">api</span> <span class="badge app">ubuntu-24.04 · .NET 10</span></h3>
+        <div class="steps"><span class="chip">restore</span><span class="arrow">→</span><span class="chip">build Release</span><span class="arrow">→</span><span class="chip">dotnet test</span></div>
+      </div>
+      <div class="card">
+        <h3>CI · <span class="mono">ml</span> <span class="badge data">ubuntu-24.04 · Python 3.12</span></h3>
+        <div class="steps"><span class="chip">pip install</span><span class="arrow">→</span><span class="chip">ruff check + format</span><span class="arrow">→</span><span class="chip">pytest</span></div>
+      </div>
+      <div class="card">
+        <h3>CI · <span class="mono">web</span> <span class="badge pres">ubuntu-24.04 · Node 22</span></h3>
+        <div class="steps"><span class="chip">npm ci</span><span class="arrow">→</span><span class="chip">oxlint</span><span class="arrow">→</span><span class="chip">vitest</span><span class="arrow">→</span><span class="chip">build</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Roadmap -->
+  <section>
+    <h2><span class="num">06</span>Roadmap</h2>
+    <p class="lead"><code>ROADMAP.md</code> now lists only future work; the MVP phase plan lives in git history.</p>
+    <div class="timeline">
+      <div class="phase done">
+        <div class="dot-line"><span class="dot"></span><span class="line"></span></div>
+        <div class="card">
+          <h3>MVP<span class="now">you are here</span></h3>
+          <span class="pill ok">done</span>
+          <p>Link → acquisition → preprocessing → signals → aggregation → explanation → result UI, end to end.</p>
+        </div>
+      </div>
+      <div class="phase off">
+        <div class="dot-line"><span class="dot"></span><span class="line"></span></div>
+        <div class="card">
+          <h3>Spotify integration</h3>
+          <span class="pill off">not started</span>
+          <p>Accept Spotify track links alongside YouTube; <code>YouTubeUrl</code> is the only parser today.</p>
+        </div>
+      </div>
+      <div class="phase off">
+        <div class="dot-line"><span class="dot"></span><span class="line"></span></div>
+        <div class="card">
+          <h3>Audio file upload</h3>
+          <span class="pill off">not started</span>
+          <p>Upload a file instead of a link; the API accepts only a JSON <code>url</code> today.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>Generated from the working tree at 2026-10-01 14:09:02 (local time). Not committed.</footer>
+</div>
+
+<div id="viewer" class="viewer" hidden>
+  <div class="viewer-bar">
+    <span class="viewer-title"></span>
+    <button data-act="in" title="Zoom in">+</button>
+    <button data-act="out" title="Zoom out">−</button>
+    <button data-act="fit" title="Fit to screen">Fit</button>
+    <button data-act="one" title="Actual size">100%</button>
+    <button data-act="close" title="Close (Esc)">✕</button>
+  </div>
+  <div class="viewer-stage"><div class="viewer-canvas"></div></div>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+
+  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: dark
+      ? {
+          fontFamily: 'Inter, system-ui, sans-serif',
+          fontSize: '15px',
+          primaryColor: '#251a3d',
+          primaryBorderColor: '#b18cff',
+          primaryTextColor: '#e7eaf0',
+          textColor: '#e7eaf0',
+          lineColor: '#7d869a',
+          edgeLabelBackground: '#161a23',
+          clusterBkg: '#1b202b',
+          clusterBorder: '#3a4152',
+          titleColor: '#e7eaf0',
+          labelColor: '#e7eaf0',
+          stateLabelColor: '#e7eaf0',
+          transitionLabelColor: '#c9cfdb',
+          transitionColor: '#7d869a',
+          background: '#161a23',
+        }
+      : {
+          fontFamily: 'Inter, system-ui, sans-serif',
+          fontSize: '15px',
+          primaryColor: '#ece3fe',
+          primaryBorderColor: '#7c3aed',
+          primaryTextColor: '#111827',
+          textColor: '#111827',
+          lineColor: '#8a93a6',
+          edgeLabelBackground: '#ffffff',
+          clusterBkg: '#f7f8fb',
+          clusterBorder: '#d5d9e2',
+          titleColor: '#111827',
+          labelColor: '#111827',
+          stateLabelColor: '#111827',
+          transitionLabelColor: '#374151',
+          transitionColor: '#8a93a6',
+          background: '#ffffff',
+        },
+    flowchart: { curve: 'basis', htmlLabels: true, padding: 16, useMaxWidth: false },
+    state: { useMaxWidth: false },
+  });
+  await mermaid.run();
+
+  const viewer = document.getElementById('viewer');
+  const stage = viewer.querySelector('.viewer-stage');
+  const canvas = viewer.querySelector('.viewer-canvas');
+  let s = 1, x = 0, y = 0, w = 0, h = 0;
+  const apply = () => { canvas.style.transform = `translate(${x}px, ${y}px) scale(${s})`; };
+  const fit = () => {
+    const r = stage.getBoundingClientRect();
+    s = Math.min((r.width - 48) / w, (r.height - 48) / h);
+    x = (r.width - w * s) / 2; y = (r.height - h * s) / 2; apply();
+  };
+  const zoomAt = (f, cx, cy) => {
+    const n = Math.min(8, Math.max(0.1, s * f));
+    x = cx - (cx - x) * (n / s); y = cy - (cy - y) * (n / s); s = n; apply();
+  };
+  const open = (card) => {
+    const svg = card.querySelector('svg').cloneNode(true);
+    const vb = svg.viewBox.baseVal; w = vb.width; h = vb.height;
+    svg.removeAttribute('style'); svg.setAttribute('width', w); svg.setAttribute('height', h);
+    canvas.replaceChildren(svg);
+    viewer.querySelector('.viewer-title').textContent = card.dataset.title || '';
+    viewer.hidden = false; document.body.style.overflow = 'hidden'; fit();
+  };
+  const close = () => { viewer.hidden = true; document.body.style.overflow = ''; };
+  document.querySelectorAll('.diagram-card').forEach((card) => {
+    card.querySelector('.expand').addEventListener('click', () => open(card));
+    card.querySelector('.diagram').addEventListener('click', () => open(card));
+  });
+  viewer.querySelector('.viewer-bar').addEventListener('click', (e) => {
+    const act = e.target.closest('button')?.dataset.act;
+    const r = stage.getBoundingClientRect();
+    if (act === 'in') { zoomAt(1.25, r.width / 2, r.height / 2); }
+    if (act === 'out') { zoomAt(0.8, r.width / 2, r.height / 2); }
+    if (act === 'fit') { fit(); }
+    if (act === 'one') { zoomAt(1 / s, r.width / 2, r.height / 2); }
+    if (act === 'close') { close(); }
+  });
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const r = stage.getBoundingClientRect();
+    zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  const pts = new Map(); let pinch = 0;
+  stage.addEventListener('pointerdown', (e) => { stage.setPointerCapture(e.pointerId); pts.set(e.pointerId, e); stage.classList.add('dragging'); });
+  stage.addEventListener('pointermove', (e) => {
+    const prev = pts.get(e.pointerId); if (!prev) { return; }
+    pts.set(e.pointerId, e);
+    if (pts.size === 1) { x += e.clientX - prev.clientX; y += e.clientY - prev.clientY; apply(); return; }
+    const [a, b] = [...pts.values()];
+    const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    const r = stage.getBoundingClientRect();
+    if (pinch) { zoomAt(d / pinch, (a.clientX + b.clientX) / 2 - r.left, (a.clientY + b.clientY) / 2 - r.top); }
+    pinch = d;
+  });
+  const up = (e) => { pts.delete(e.pointerId); pinch = 0; if (!pts.size) { stage.classList.remove('dragging'); } };
+  stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !viewer.hidden) { close(); } });
+  window.addEventListener('resize', () => { if (!viewer.hidden) { fit(); } });
+</script>
+</body>
+</html>
