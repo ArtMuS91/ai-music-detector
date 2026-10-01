@@ -26,17 +26,20 @@ function Waveform({ peaks }: { peaks: number[] }) {
 
 function SpectrogramImage({ spectrogram }: { spectrogram: Spectrogram }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { frames, bands, values } = spectrogram;
 
+  // Keyed on the data rather than the object: every poll brings a new but identical object,
+  // and decoding and recolouring the image each time would be wasted work.
   useEffect(() => {
     const context = canvasRef.current?.getContext('2d');
     if (!context) {
       return;
     }
 
-    const image = context.createImageData(spectrogram.frames, spectrogram.bands);
-    image.data.set(spectrogramPixels(spectrogram));
+    const image = context.createImageData(frames, bands);
+    image.data.set(spectrogramPixels({ frames, bands, values }));
     context.putImageData(image, 0, 0);
-  }, [spectrogram]);
+  }, [frames, bands, values]);
 
   return (
     <Box sx={{ position: 'relative' }}>

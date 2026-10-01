@@ -14,6 +14,15 @@ const STANCES: Record<EvidenceStance, { label: string; color: ChipColor }> = {
   Neutral: { label: 'Neutral', color: 'default' },
 };
 
+/** Evidence comes from web search; anything but an http(s) link (javascript:, data:) is not rendered as one. */
+function isWebUrl(url: string) {
+  try {
+    return ['http:', 'https:'].includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+
 /** Within this distance of 0.5 a score is too close to call either way. */
 const UNDECIDED_MARGIN = 0.1;
 
@@ -86,9 +95,9 @@ function SignalItem({ signal }: { signal: Signal }) {
           {signal.detail}
         </Typography>
       )}
-      {signal.evidence.length > 0 && (
+      {signal.evidence.some((link) => isWebUrl(link.url)) && (
         <Stack component="ul" spacing={0.5} sx={{ listStyle: 'none', p: 0, m: 0 }}>
-          {signal.evidence.map((link) => (
+          {signal.evidence.filter((link) => isWebUrl(link.url)).map((link) => (
             <Stack
               component="li"
               key={link.url}

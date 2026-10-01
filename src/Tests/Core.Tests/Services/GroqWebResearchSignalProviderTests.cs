@@ -48,6 +48,21 @@ public class GroqWebResearchSignalProviderTests
         Assert.Equal(GuardianUrl + "/", Assert.Single(signal.Evidence!).Url);
     }
 
+    [Theory]
+    [InlineData("javascript:alert(document.cookie)")]
+    [InlineData("data:text/html,<script>alert(1)</script>")]
+    [InlineData("ftp://files.example/story")]
+    public async Task NonWebUrl_IsDropped_EvenWhenSearchReturnedIt(string url)
+    {
+        var provider = CreateProvider(GroqReply(
+            content: Verdict(0.9, 0.9, (GuardianUrl, "ai"), (url, "ai")),
+            searchResults: [(GuardianUrl, "Guardian"), (url, "Sneaky")]));
+
+        var signal = await provider.DetectAsync(Audio, Track);
+
+        Assert.Equal(GuardianUrl, Assert.Single(signal.Evidence!).Url);
+    }
+
     [Fact]
     public async Task ClaimWithNoVerifiableEvidence_CountsForLittle()
     {

@@ -56,6 +56,26 @@ describe('SignalBreakdown', () => {
     expect(within(link.closest('li')!).getByText('Says AI')).toBeInTheDocument();
   });
 
+  it('does not render non-web evidence urls as links', () => {
+    render(
+      <SignalBreakdown
+        signals={[
+          signal({
+            evidence: [
+              { url: 'javascript:alert(1)', title: 'Sneaky', stance: 'AiGenerated' },
+              { url: 'https://example.com/story', title: 'Real story', stance: 'Human' },
+            ],
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText('Sneaky')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
+      'https://example.com/story',
+    ]);
+  });
+
   it('says so when there are no signals', () => {
     render(<SignalBreakdown signals={[]} />);
 

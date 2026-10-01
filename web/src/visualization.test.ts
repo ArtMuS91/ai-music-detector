@@ -25,9 +25,6 @@ describe('spectrogramPixels', () => {
     const pixels = spectrogramPixels({
       frames: 2,
       bands: 2,
-      minFrequency: 30,
-      maxFrequency: 22050,
-      minDecibels: -80,
       values: btoa(String.fromCharCode(0, 255, 255, 0)),
     });
 

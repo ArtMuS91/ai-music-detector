@@ -43,7 +43,7 @@ export function decodeBase64(base64: string): Uint8Array {
  * RGBA pixels for a canvas `frames` wide and `bands` tall: time runs left to right and the
  * highest band is the top row, while the data itself is time-major with the lowest band first.
  */
-export function spectrogramPixels(spectrogram: Spectrogram): Uint8ClampedArray {
+export function spectrogramPixels(spectrogram: Pick<Spectrogram, 'frames' | 'bands' | 'values'>): Uint8ClampedArray {
   const { frames, bands } = spectrogram;
   const values = decodeBase64(spectrogram.values);
   const pixels = new Uint8ClampedArray(frames * bands * 4);
