@@ -12,6 +12,7 @@ import { getAnalysis, InvalidUrlError, JobNotFoundError, submitAnalysis } from '
 import { TERMINAL_STATUSES, type AnalysisJob } from './models';
 import HowItWorks from './components/HowItWorks';
 import JobCard from './components/JobCard';
+import ThemeToggle from './components/ThemeToggle';
 import YouTubeMusicIcon from './components/YouTubeMusicIcon';
 
 const POLL_INTERVAL_MS = 1500;
@@ -133,6 +134,8 @@ function App() {
                 <Typography variant="h4" component="h1">
                   AI Music Detector
                 </Typography>
+                <Box sx={{ flexGrow: 1 }} />
+                <ThemeToggle />
               </Stack>
               <Typography variant="body2" color="text.secondary">
                 Paste a YouTube / YouTube Music link to analyze the track.

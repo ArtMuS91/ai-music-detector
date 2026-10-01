@@ -12,9 +12,10 @@ export const numberSx = {
   px: 0.5,
 } as const;
 
-// Both schemes are emitted as CSS variables under prefers-color-scheme, so the UI tracks the OS setting.
+// Both schemes are emitted as CSS variables, switched by a class on <html>: the UI follows the OS
+// setting until the viewer picks one with the theme toggle.
 export const theme = createTheme({
-  cssVariables: true,
+  cssVariables: { colorSchemeSelector: 'class' },
   colorSchemes: {
     light: true,
     dark: true,
