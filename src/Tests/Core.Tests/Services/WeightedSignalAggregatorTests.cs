@@ -133,6 +133,20 @@ public class WeightedSignalAggregatorTests
     }
 
     [Fact]
+    public void Summary_NamesWeightedSignalsThatLeanNeitherWay()
+    {
+        var result = _aggregator.Aggregate(
+        [
+            new Signal("Generator fingerprint", 0.99, 0.8),
+            new Signal("Web research", 0.5, 0.4),
+        ]);
+
+        Assert.EndsWith(
+            "2 of 2 signals had something to go on. Pointing to AI: Generator fingerprint. Undecided: Web research.",
+            result.Explanation);
+    }
+
+    [Fact]
     public void Signals_AreKeptAsGiven()
     {
         Signal[] signals = [new Signal("Generator fingerprint", 0.99, 0.8), new Signal("Metadata clues", 0.5, 0)];

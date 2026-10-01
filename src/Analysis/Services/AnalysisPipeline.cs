@@ -137,7 +137,7 @@ public sealed class AnalysisPipeline(
         string step,
         Func<Task<T>> run,
         CancellationToken cancellationToken)
-        where T : class
+        where T : class?
     {
         try
         {

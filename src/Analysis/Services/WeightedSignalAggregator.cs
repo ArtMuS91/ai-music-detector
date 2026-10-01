@@ -122,6 +122,13 @@ public sealed class WeightedSignalAggregator : ISignalAggregator
             parts.Add($"Pointing to human: {human}.");
         }
 
+        // Weighted but scored exactly 0.5: counted above as having something to go on, so name them too.
+        var undecided = contributions.Where(c => c.Evidence == 0).Select(c => c.Signal.Name).ToList();
+        if (undecided.Count > 0)
+        {
+            parts.Add($"Undecided: {string.Join(", ", undecided)}.");
+        }
+
         return string.Join(" ", parts);
     }
 
