@@ -2,6 +2,20 @@
 
 Music track analyser to detect if it fully or partially AI generated
 
+## Demo
+
+Paste a YouTube or YouTube Music link and get a verdict (AI-generated, human-made or mixed) with an AI likelihood, a confidence score, the signals behind it and a written explanation.
+
+**Human-made:** Rammstein – *Zick Zack*
+
+![Analyzing a human-made track](docs/media/demo-human.gif)
+
+**AI-generated:** The Velvet Sundown – *Dust on the Wind*
+
+![Analyzing an AI-generated track](docs/media/demo-ai.gif)
+
+Full-quality videos: [human-made](docs/media/demo-human.mp4) · [AI-generated](docs/media/demo-ai.mp4)
+
 ## Getting started
 
 ### API (.NET 10)

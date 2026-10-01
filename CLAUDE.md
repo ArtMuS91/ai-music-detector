@@ -28,7 +28,7 @@ Monorepo with two independently-run apps sharing one git history:
 - `GroqLyricsTranscriber` runs Whisper over the preprocessed audio. Lyrics are context for the explanation, not a signal, and segments Whisper rates as unreliable are dropped.
 - `GroqResultExplainer` writes the result's explanation from the already-aggregated result. If either of these two fails, the result keeps the aggregator's rule-based summary.
 
-`ROADMAP.md` tracks the phased MVP plan — check it before starting new work to see which phase a change belongs to.
+`ROADMAP.md` lists planned post-MVP features — check it before starting new work.
 
 ## Commands
 
@@ -71,7 +71,7 @@ Monorepo with two independently-run apps sharing one git history:
 
 - The API is a minimal-API project (no MVC controllers) — endpoints are registered directly in `src/Api/Program.cs` via `app.MapGet`/etc.
 - CORS in `Program.cs` is restricted to the Vite dev origin (`http://localhost:5173`) — update this policy if the frontend's dev port or deployed origin changes.
-- The frontend reads the API base URL from `VITE_API_BASE_URL` (Vite env var), defaulting to `http://localhost:5214` (see `web/src/App.tsx`). Both apps must be running simultaneously for the frontend to reach the API.
+- The frontend reads the API base URL from `VITE_API_BASE_URL` (Vite env var), defaulting to `http://localhost:5214` (see `web/src/api.ts`). Both apps must be running simultaneously for the frontend to reach the API. The `??` there matters: setting `VITE_API_BASE_URL=` to an empty string (e.g. in the gitignored `web/.env.development.local`) makes API calls same-origin, and the Vite dev server proxies `/api` to `VITE_API_PROXY_TARGET` (default `http://localhost:5214`, see `web/vite.config.ts`). That is the dev-tunnel workflow: forward only port 5173 and the API is reached through the proxy, with no CORS change needed.
 - Project references are wired so the dependency direction stays fixed (`Api` → all three, `Infrastructure`/`Analysis` → `Core`).
 - **Layering rule: endpoints never depend on a repository directly.** `Api` endpoints call a `Core.Services` interface (e.g. `IAnalysisService`) that owns the business logic (validation, orchestration) and is the only thing that talks to `Core.Repositories`. This keeps request-time rules in one place instead of scattered across endpoint handlers. `AnalysisService` (in `Analysis/Services`) is the current example — it validates the URL and delegates to `IAnalysisJobRepository`. Background services (e.g. `AnalysisWorker`) are the pipeline's own business logic, not a thin API layer, so they may use repositories directly — though the per-job stages live in `AnalysisPipeline` (in `Analysis`, unit-tested with fakes) and the worker only claims jobs and hands them over.
 - **Folder convention**: abstractions and their implementations are grouped by kind, not dumped in a generic `Abstractions`/`Contracts` folder — `Repositories/` for persistence seams, `Services/` for everything else (business logic and external integrations). This applies in `Core` (interfaces) and in `Infrastructure`/`Analysis` (implementations). Api request/response DTOs live under `Api/Models/<EndpointGroup>/`, one type per file, grouped by the endpoint group that owns them (mirrors the endpoint file in `Api/Endpoints`).
