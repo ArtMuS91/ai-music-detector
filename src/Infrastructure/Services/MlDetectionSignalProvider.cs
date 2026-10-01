@@ -17,8 +17,6 @@ public sealed class MlDetectionSignalProvider(
     string detectorId,
     ILogger<MlDetectionSignalProvider> logger) : IDetectionSignalProvider
 {
-    public const string HttpClientName = "MlService";
-
     public string Name => $"ML detector '{detectorId}'";
 
     public async Task<Signal> DetectAsync(PreprocessedAudio audio, Track track, CancellationToken cancellationToken = default)

@@ -197,7 +197,9 @@ public sealed class GroqWebResearchSignalProvider(
         {
             foreach (var result in tool?["search_results"]?["results"]?.AsArray() ?? [])
             {
-                if (result?["url"]?.GetValue<string>() is { Length: > 0 } url)
+                // Only web links: the client renders these as hrefs, so a javascript: or data: URL
+                // in a search result must never get that far.
+                if (result?["url"]?.GetValue<string>() is { Length: > 0 } url && IsWebUrl(url))
                 {
                     results.TryAdd(Normalize(url), (url, result["title"]?.GetValue<string>()));
                 }
@@ -236,6 +238,10 @@ public sealed class GroqWebResearchSignalProvider(
         "human" => EvidenceStance.Human,
         _ => EvidenceStance.Neutral,
     };
+
+    private static bool IsWebUrl(string url)
+        => Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
     private static string Normalize(string url) => url.Trim().TrimEnd('/').ToLowerInvariant();
 

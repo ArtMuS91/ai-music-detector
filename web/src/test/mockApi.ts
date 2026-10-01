@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import type { AnalysisJob } from '../models';
+import type { AnalysisJob, AnalysisResult, AudioVisualization, Signal } from '../models';
 
 type Route = (init?: RequestInit) => Response | Promise<Response>;
 
@@ -40,7 +40,49 @@ export function job(overrides: Partial<AnalysisJob> = {}): AnalysisJob {
     createdAt: '2026-09-23T10:00:00Z',
     updatedAt: '2026-09-23T10:00:00Z',
     track: null,
+    result: null,
+    visualization: null,
     failureReason: null,
+    failedStage: null,
+    ...overrides,
+  };
+}
+
+export function signal(overrides: Partial<Signal> = {}): Signal {
+  return {
+    name: 'Generator fingerprint',
+    score: 0.97,
+    weight: 0.8,
+    detail: 'Model probability 0.97.',
+    evidence: [],
+    ...overrides,
+  };
+}
+
+export function result(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
+  return {
+    verdict: 'AiGenerated',
+    aiProbability: 0.91,
+    confidence: 0.74,
+    signals: [signal()],
+    explanation: 'The audio carries a generator fingerprint.',
+    ...overrides,
+  };
+}
+
+export function visualization(overrides: Partial<AudioVisualization> = {}): AudioVisualization {
+  return {
+    startSeconds: 90,
+    durationSeconds: 180,
+    waveform: [0.2, 1, 0.5],
+    spectrogram: {
+      frames: 2,
+      bands: 2,
+      minFrequency: 30,
+      maxFrequency: 22050,
+      minDecibels: -80,
+      values: 'AAH//g==',
+    },
     ...overrides,
   };
 }

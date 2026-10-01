@@ -6,39 +6,26 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import LinearProgress from '@mui/material/LinearProgress';
-import { checkHealth, getAnalysis, submitAnalysis } from './api';
+import { checkHealth, getAnalysis, InvalidUrlError, JobNotFoundError, submitAnalysis } from './api';
 import { TERMINAL_STATUSES, type AnalysisJob } from './models';
+import JobCard from './components/JobCard';
 
 const POLL_INTERVAL_MS = 1500;
 
-const STATUS_LABELS: Record<AnalysisJob['status'], string> = {
-  Pending: 'Queued',
-  Acquiring: 'Downloading audio',
-  Preprocessing: 'Audio acquired — analysis not implemented yet',
-  Analyzing: 'Analyzing',
-  Completed: 'Done',
-  Failed: 'Failed',
-};
-
 type ApiStatus = 'checking' | 'online' | 'offline';
 
-function formatDuration(seconds: number | null) {
-  if (seconds === null) {
-    return null;
-  }
-
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}:${String(Math.round(seconds % 60)).padStart(2, '0')}`;
+function messageOf(e: unknown) {
+  return e instanceof Error ? e.message : String(e);
 }
 
 function App() {
   const [url, setUrl] = useState('');
   const [apiStatus, setApiStatus] = useState<ApiStatus>('checking');
   const [job, setJob] = useState<AnalysisJob | null>(null);
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A failed poll is usually transient, so it is shown as a warning and polling carries on.
+  const [pollError, setPollError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const jobIdRef = useRef<string | null>(null);
 
@@ -59,9 +46,21 @@ function App() {
         // A newer submission may have landed while this request was in flight.
         if (jobIdRef.current === next.id) {
           setJob(next);
+          setPollError(null);
         }
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        if (jobIdRef.current !== job.id) {
+          return;
+        }
+
+        if (e instanceof JobNotFoundError) {
+          jobIdRef.current = null;
+          setJob(null);
+          setPollError(null);
+          setError(e.message);
+        } else {
+          setPollError(`Could not refresh the analysis (${messageOf(e)}). Retrying…`);
+        }
       }
     }, POLL_INTERVAL_MS);
 
@@ -70,7 +69,9 @@ function App() {
 
   async function handleSubmit() {
     setSubmitting(true);
+    setUrlError(null);
     setError(null);
+    setPollError(null);
     setJob(null);
 
     try {
@@ -79,17 +80,20 @@ function App() {
       setJob(created);
     } catch (e) {
       jobIdRef.current = null;
-      setError(e instanceof Error ? e.message : String(e));
+      if (e instanceof InvalidUrlError) {
+        setUrlError(e.message);
+      } else {
+        setError(messageOf(e));
+      }
     } finally {
       setSubmitting(false);
     }
   }
 
-  const inProgress = job !== null && !TERMINAL_STATUSES.includes(job.status);
   const canSubmit = url !== '' && !submitting && isOnline;
 
   return (
-    <Container maxWidth="sm" sx={{ py: 8 }}>
+    <Container maxWidth="md" sx={{ py: 8 }}>
       <Stack spacing={3}>
         <Stack spacing={1}>
           <Typography variant="h4" component="h1">
@@ -104,12 +108,17 @@ function App() {
           label="YouTube URL"
           placeholder="https://music.youtube.com/watch?v="
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            setUrlError(null);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && canSubmit) {
               handleSubmit();
             }
           }}
+          error={urlError !== null}
+          helperText={urlError}
           fullWidth
         />
         <Button variant="contained" disabled={!canSubmit} onClick={handleSubmit}>
@@ -118,34 +127,9 @@ function App() {
 
         {error && <Alert severity="error">{error}</Alert>}
 
-        {job && (
-          <Card variant="outlined">
-            <CardContent>
-              <Stack spacing={1.5}>
-                <Typography variant="overline" color="text.secondary">
-                  {STATUS_LABELS[job.status]}
-                </Typography>
+        {pollError && <Alert severity="warning">{pollError}</Alert>}
 
-                {inProgress && <LinearProgress />}
-
-                {job.track && (
-                  <Stack spacing={0.5}>
-                    <Typography variant="subtitle1">{job.track.title ?? 'Unknown title'}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {[job.track.artist ?? job.track.channel, formatDuration(job.track.durationSeconds)]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </Typography>
-                  </Stack>
-                )}
-
-                {job.status === 'Failed' && job.failureReason && (
-                  <Alert severity="error">{job.failureReason}</Alert>
-                )}
-              </Stack>
-            </CardContent>
-          </Card>
-        )}
+        {job && <JobCard job={job} />}
 
         <Chip
           label={`API: ${apiStatus}`}

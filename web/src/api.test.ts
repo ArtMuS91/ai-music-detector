@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkHealth, getAnalysis, submitAnalysis } from './api';
+import { checkHealth, getAnalysis, InvalidUrlError, JobNotFoundError, submitAnalysis } from './api';
 import { job, json, mockApi, networkError } from './test/mockApi';
 
 describe('checkHealth', () => {
@@ -41,9 +41,9 @@ describe('submitAnalysis', () => {
         json({ errors: { Url: ['Not a YouTube or YouTube Music video link.'] } }, 400),
     });
 
-    await expect(submitAnalysis('not a link')).rejects.toThrow(
-      'Not a YouTube or YouTube Music video link.',
-    );
+    const rejection = expect(submitAnalysis('not a link')).rejects;
+    await rejection.toThrow('Not a YouTube or YouTube Music video link.');
+    await rejection.toBeInstanceOf(InvalidUrlError);
   });
 
   it('falls back to a generic message when a 400 has no field errors', async () => {
@@ -66,9 +66,15 @@ describe('getAnalysis', () => {
     expect((await getAnalysis('job-1')).status).toBe('Acquiring');
   });
 
-  it('throws on an unknown job', async () => {
+  it('throws a not-found error for an unknown job', async () => {
     mockApi({ 'GET /api/analyze/missing': () => json({}, 404) });
 
-    await expect(getAnalysis('missing')).rejects.toThrow('The API responded with 404.');
+    await expect(getAnalysis('missing')).rejects.toBeInstanceOf(JobNotFoundError);
+  });
+
+  it('reports the status code for other failures', async () => {
+    mockApi({ 'GET /api/analyze/job-1': () => json({}, 500) });
+
+    await expect(getAnalysis('job-1')).rejects.toThrow('The API responded with 500.');
   });
 });
