@@ -22,10 +22,18 @@ public static class InfrastructureServiceCollectionExtensions
         services.Configure<YtDlpOptions>(configuration.GetSection(YtDlpOptions.SectionName));
         services.Configure<FfmpegOptions>(configuration.GetSection(FfmpegOptions.SectionName));
         services.Configure<GroqOptions>(configuration.GetSection(GroqOptions.SectionName));
+        services.Configure<SpotifyOptions>(configuration.GetSection(SpotifyOptions.SectionName));
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IAnalysisJobRepository, EfAnalysisJobRepository>();
-        services.AddSingleton<IAudioAcquisitionService, YtDlpAudioAcquisitionService>();
+        services.AddHttpClient<SpotifyEmbedClient>((provider, client) =>
+        {
+            var spotify = provider.GetRequiredService<IOptions<SpotifyOptions>>().Value;
+            client.BaseAddress = spotify.BaseUrl;
+            client.Timeout = spotify.Timeout;
+        });
+        // Transient, not singleton: it holds a typed HttpClient, which must not be captured for the app's lifetime.
+        services.AddTransient<IAudioAcquisitionService, YtDlpAudioAcquisitionService>();
         services.AddSingleton<IAudioPreprocessor, FfmpegAudioPreprocessor>();
 
         AddGroqClient<GroqWebResearchSignalProvider>(services);

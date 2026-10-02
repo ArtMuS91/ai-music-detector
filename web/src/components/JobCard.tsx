@@ -4,6 +4,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Divider from '@mui/material/Divider';
 import LinearProgress from '@mui/material/LinearProgress';
+import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { TERMINAL_STATUSES, type AnalysisJob, type AnalysisStatus } from '../models';
@@ -74,6 +75,16 @@ function JobCard({ job }: { job: AnalysisJob }) {
                   .filter(Boolean)
                   .join(' · ')}
               </Typography>
+              {track.matchedUrl && (
+                // Spotify audio is DRM-protected; the user should see which recording stood in for it.
+                <Typography variant="caption" color="text.secondary">
+                  {'Audio analyzed from the closest '}
+                  <Link href={track.matchedUrl} target="_blank" rel="noopener noreferrer">
+                    YouTube match
+                  </Link>
+                  {', which may be a different version of the track.'}
+                </Typography>
+              )}
             </Stack>
           )}
 

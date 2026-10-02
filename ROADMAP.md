@@ -6,5 +6,4 @@ The MVP is done: a YouTube/YouTube Music link goes through acquisition, preproce
 
 ## Future
 
-- **Spotify integration** — accept Spotify track links alongside YouTube ones.
 - **Audio file upload** — let the user upload an audio file directly instead of pasting a link.

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-AI Music Detector — a web app where a user pastes a YouTube/YouTube Music link and the system estimates whether the track is AI-generated, human-created, or mixed, with confidence and supporting signals. The MVP is complete: audio acquisition, preprocessing, detection signals (web research, metadata heuristics, an audio detector in the Python ML service), rule-based aggregation into a verdict, a Groq-written explanation (with Whisper lyrics as context), and the result UI work end to end.
+AI Music Detector — a web app where a user pastes a YouTube/YouTube Music or Spotify link and the system estimates whether the track is AI-generated, human-created, or mixed, with confidence and supporting signals. The MVP is complete: audio acquisition, preprocessing, detection signals (web research, metadata heuristics, an audio detector in the Python ML service), rule-based aggregation into a verdict, a Groq-written explanation (with Whisper lyrics as context), and the result UI work end to end.
 
 ## Repository layout
 
@@ -20,6 +20,8 @@ Monorepo with two independently-run apps sharing one git history:
 - `ml/` — Python FastAPI service hosting the audio detectors (`app/detectors/`) and the waveform/spectrogram renderer (`app/visualize.py`), tests in `ml/tests` (pytest)
 
 **yt-dlp** is the open-source CLI tool `Infrastructure` shells out to for downloading the audio-only stream from a YouTube/YouTube Music URL — it is not a library dependency, just an executable. The API's Docker image (`src/Api/Dockerfile`) bundles the standalone `yt-dlp_linux` binary so nothing needs installing on the host when running via `docker compose`; running the API with `dotnet run` instead requires `yt-dlp` on the host `PATH` (see Prerequisites below).
+
+**Spotify** links are accepted too, but Spotify's audio is DRM-protected and cannot be downloaded. `SpotifyEmbedClient` reads the track's title, artists and duration from the public embed page (`open.spotify.com/embed/track/{id}`, no API key; undocumented, so its parsing is pinned by a fixture test). `YtDlpAudioAcquisitionService` then runs a yt-dlp YouTube search (`ytsearch5:`) and downloads the first result within a few seconds of the Spotify duration, or else the first result: a best guess. The job keeps the Spotify link as `SourceUrl` and records the analyzed video in `Track.MatchedUrl`, which the UI links. Spotify's release date is deliberately not used as `PublishedAt`, because distributors can backdate it.
 
 **ffmpeg** is the second CLI tool `Infrastructure` shells out to: preprocessing uses it to decode whatever yt-dlp downloaded (webm/opus, m4a, ...) into mono 16-bit PCM WAV at a fixed sample rate, trimmed to a window from the middle of the track (`Ffmpeg` section in `appsettings.json`). The Docker image installs it via apt; `dotnet run` needs it on the host `PATH`.
 
@@ -90,6 +92,7 @@ Monorepo with two independently-run apps sharing one git history:
 ## Web conventions
 
 - UI pieces live in `web/src/components/` (one component per file, default export); `App.tsx` keeps only the form, polling and page-level errors. Pure helpers that components use (formatting, spectrogram decoding/colormap) are plain modules in `web/src/` (`format.ts`, `visualization.ts`) so they can be unit-tested without rendering.
+- Icons and other images live in `web/src/assets/` as files (e.g. `spotify.svg`), imported as URLs and rendered with `<Box component="img" alt="" …/>` — not as inline-SVG components in `components/`.
 - TypeScript models/types live in `web/src/models/` (one file per type, e.g. `Track.ts`, `AnalysisJob.ts`), separate from the components and `api.ts` that use them.
 - Tests sit next to the file they cover (`App.test.tsx`, `api.test.ts`); shared test setup and helpers live in `web/src/test/`. Tests never hit a real API — stub `fetch` with `mockApi` from `src/test/mockApi.ts`, which routes by `"METHOD /path"` and throws on any request it wasn't told about. Query elements the way a user finds them (role + accessible name) rather than by class or test id. Data builders for richer responses (`job`, `result`, `signal`, `visualization`) live in `mockApi.ts` too. jsdom has no canvas, so `setup.ts` stubs `getContext` to return null; canvas-drawing code must handle that. Polling is tested with Vitest fake timers (`vi.useFakeTimers({ shouldAdvanceTime: true })` plus `userEvent.setup({ advanceTimers: vi.advanceTimersByTime })`).
 - The web job in CI (`.github/workflows/ci.yml`) runs lint, then tests, then build; a failing test fails the job.

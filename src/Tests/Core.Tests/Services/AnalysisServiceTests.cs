@@ -37,6 +37,15 @@ public class AnalysisServiceTests
     }
 
     [Fact]
+    public async Task SpotifyLink_IsQueuedUnderItsCanonicalUrl()
+    {
+        await _service.SubmitAsync("https://open.spotify.com/intl-de/track/4uLU6hMCjMI75M1A2tKUQC?si=share");
+
+        var request = Assert.Single(_jobs.Created);
+        Assert.Equal("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC", request.SourceUrl);
+    }
+
+    [Fact]
     public async Task InvalidLink_IsRejected_WithoutTouchingTheStore()
     {
         Assert.Null(await _service.SubmitAsync("https://vimeo.com/123"));

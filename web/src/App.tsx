@@ -13,7 +13,8 @@ import { TERMINAL_STATUSES, type AnalysisJob } from './models';
 import HowItWorks from './components/HowItWorks';
 import JobCard from './components/JobCard';
 import ThemeToggle from './components/ThemeToggle';
-import YouTubeMusicIcon from './components/YouTubeMusicIcon';
+import spotifyIcon from './assets/spotify.svg';
+import youTubeMusicIcon from './assets/youtube-music.svg';
 
 const POLL_INTERVAL_MS = 1500;
 
@@ -22,6 +23,9 @@ const URL_PARAM = 'url';
 
 /** MUI's "lg" (1200px) plus a fifth, so wide screens get a wider result and legend. */
 const MAX_CONTENT_WIDTH = 1440;
+
+/** Only picks the input's icon; the API decides which links it accepts. */
+const SPOTIFY_LINK = /^(spotify:|(https?:\/\/)?open\.spotify\.com\/)/i;
 
 function messageOf(e: unknown) {
   return e instanceof Error ? e.message : String(e);
@@ -138,13 +142,13 @@ function App() {
                 <ThemeToggle />
               </Stack>
               <Typography variant="body2" color="text.secondary">
-                Paste a YouTube / YouTube Music link to analyze the track.
+                Paste a YouTube, YouTube Music or Spotify link to analyze the track.
               </Typography>
             </Stack>
 
             <TextField
-              label="YouTube URL"
-              placeholder="https://music.youtube.com/watch?v="
+              label="Track URL"
+              placeholder="https://music.youtube.com/watch?v= or https://open.spotify.com/track/"
               value={url}
               onChange={(e) => {
                 setUrl(e.target.value);
@@ -162,7 +166,12 @@ function App() {
                 input: {
                   startAdornment: (
                     <InputAdornment position="start">
-                      <YouTubeMusicIcon />
+                      <Box
+                        component="img"
+                        src={SPOTIFY_LINK.test(url.trim()) ? spotifyIcon : youTubeMusicIcon}
+                        alt=""
+                        sx={{ width: 24, height: 24, display: 'block' }}
+                      />
                     </InputAdornment>
                   ),
                 },
