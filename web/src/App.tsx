@@ -16,7 +16,9 @@ import ThemeToggle from './components/ThemeToggle';
 import spotifyIcon from './assets/spotify.svg';
 import youTubeMusicIcon from './assets/youtube-music.svg';
 
-const POLL_INTERVAL_MS = 1500;
+/** Polls start this far apart, and the gap doubles while the job stays unchanged, up to the max. */
+const POLL_MIN_DELAY_MS = 1000;
+const POLL_MAX_DELAY_MS = 4000;
 
 /** Query parameter holding the analyzed link, so a page address can be shared or bookmarked. */
 const URL_PARAM = 'url';
@@ -54,21 +56,49 @@ function App() {
   // StrictMode runs mount effects twice in development; the link in the address is submitted once.
   const submittedFromAddressRef = useRef(false);
 
+  const jobId = job?.id ?? null;
+  const jobFinished = job !== null && TERMINAL_STATUSES.includes(job.status);
+
+  // Each poll is scheduled once the previous one has answered, so slow responses never pile up.
   useEffect(() => {
-    if (!job || TERMINAL_STATUSES.includes(job.status)) {
+    if (jobId === null || jobFinished) {
       return;
     }
 
-    const timer = setInterval(async () => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let etag: string | null = null;
+    let delay = POLL_MIN_DELAY_MS;
+    // Set when a poll came due while the tab was hidden; showing the tab polls straight away.
+    let paused = false;
+
+    const backOff = () => {
+      delay = Math.min(delay * 2, POLL_MAX_DELAY_MS);
+    };
+
+    const poll = async () => {
+      if (document.visibilityState === 'hidden') {
+        paused = true;
+        return;
+      }
+
       try {
-        const next = await getAnalysis(job.id);
+        const snapshot = await getAnalysis(jobId, etag);
         // A newer submission may have landed while this request was in flight.
-        if (jobIdRef.current === next.id) {
-          setJob(next);
-          setPollError(null);
+        if (cancelled || jobIdRef.current !== jobId) {
+          return;
         }
+
+        if (snapshot === null) {
+          backOff();
+        } else {
+          etag = snapshot.etag;
+          delay = POLL_MIN_DELAY_MS;
+          setJob(snapshot.job);
+        }
+        setPollError(null);
       } catch (e) {
-        if (jobIdRef.current !== job.id) {
+        if (cancelled || jobIdRef.current !== jobId) {
           return;
         }
 
@@ -77,14 +107,32 @@ function App() {
           setJob(null);
           setPollError(null);
           setError(e.message);
-        } else {
-          setPollError(`Could not refresh the analysis (${messageOf(e)}). Retrying…`);
+          return;
         }
-      }
-    }, POLL_INTERVAL_MS);
 
-    return () => clearInterval(timer);
-  }, [job]);
+        setPollError(`Could not refresh the analysis (${messageOf(e)}). Retrying…`);
+        backOff();
+      }
+
+      timer = setTimeout(poll, delay);
+    };
+
+    const resumeWhenShown = () => {
+      if (paused && document.visibilityState !== 'hidden') {
+        paused = false;
+        void poll();
+      }
+    };
+
+    timer = setTimeout(poll, delay);
+    document.addEventListener('visibilitychange', resumeWhenShown);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', resumeWhenShown);
+    };
+  }, [jobId, jobFinished]);
 
   async function submit(link: string) {
     setSubmitting(true);

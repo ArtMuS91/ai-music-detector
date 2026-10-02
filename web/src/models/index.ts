@@ -7,3 +7,4 @@ export type { EvidenceLink, EvidenceStance } from './EvidenceLink';
 export type { Signal } from './Signal';
 export type { Track } from './Track';
 export type { AnalysisJob } from './AnalysisJob';
+export type { AnalysisSnapshot } from './AnalysisSnapshot';

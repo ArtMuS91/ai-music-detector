@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getAnalysis, InvalidUrlError, JobNotFoundError, submitAnalysis } from './api';
-import { job, json, mockApi, networkError } from './test/mockApi';
+import { job, json, mockApi, networkError, notModified } from './test/mockApi';
 
 describe('submitAnalysis', () => {
   it('posts the url as JSON and returns the created job', async () => {
@@ -52,10 +52,30 @@ describe('submitAnalysis', () => {
 });
 
 describe('getAnalysis', () => {
-  it('returns the job for its id', async () => {
-    mockApi({ 'GET /api/analyze/job-1': () => json(job({ status: 'Acquiring' })) });
+  it('returns the job for its id with its ETag', async () => {
+    mockApi({ 'GET /api/analyze/job-1': () => json(job({ status: 'Acquiring' }), 200, { ETag: '"42"' }) });
 
-    expect((await getAnalysis('job-1')).status).toBe('Acquiring');
+    const snapshot = await getAnalysis('job-1');
+
+    expect(snapshot?.job.status).toBe('Acquiring');
+    expect(snapshot?.etag).toBe('"42"');
+  });
+
+  it('sends the held ETag and returns null when the job has not changed', async () => {
+    const fetchMock = mockApi({ 'GET /api/analyze/job-1': () => notModified() });
+
+    expect(await getAnalysis('job-1', '"42"')).toBeNull();
+    const [, init] = fetchMock.mock.calls[0];
+    expect(new Headers(init?.headers).get('If-None-Match')).toBe('"42"');
+  });
+
+  it('sends no If-None-Match on a first poll', async () => {
+    const fetchMock = mockApi({ 'GET /api/analyze/job-1': () => json(job()) });
+
+    await getAnalysis('job-1');
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(new Headers(init?.headers).has('If-None-Match')).toBe(false);
   });
 
   it('throws a not-found error for an unknown job', async () => {

@@ -1,4 +1,4 @@
-import type { AnalysisJob } from './models';
+import type { AnalysisJob, AnalysisSnapshot } from './models';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5214';
 
@@ -37,8 +37,18 @@ export async function submitAnalysis(url: string): Promise<AnalysisJob> {
   return response.json();
 }
 
-export async function getAnalysis(id: string): Promise<AnalysisJob> {
-  const response = await fetch(`${API_BASE_URL}/api/analyze/${id}`);
+/**
+ * Fetches a job. Given the ETag of the snapshot already held, resolves to null when the job has not
+ * changed since (the API answers 304 with no body).
+ */
+export async function getAnalysis(id: string, etag: string | null = null): Promise<AnalysisSnapshot | null> {
+  const response = await fetch(`${API_BASE_URL}/api/analyze/${id}`, {
+    headers: etag === null ? undefined : { 'If-None-Match': etag },
+  });
+
+  if (response.status === 304) {
+    return null;
+  }
 
   if (response.status === 404) {
     throw new JobNotFoundError('This analysis no longer exists. Submit the link again.');
@@ -48,5 +58,5 @@ export async function getAnalysis(id: string): Promise<AnalysisJob> {
     throw new Error(`The API responded with ${response.status}.`);
   }
 
-  return response.json();
+  return { job: await response.json(), etag: response.headers.get('ETag') };
 }

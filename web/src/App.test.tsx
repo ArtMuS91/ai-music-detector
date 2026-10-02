@@ -2,10 +2,11 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import App from './App';
-import { job, json, mockApi, networkError, result, visualization } from './test/mockApi';
+import { job, json, mockApi, networkError, notModified, result, visualization } from './test/mockApi';
 
 const VIDEO_URL = 'https://music.youtube.com/watch?v=jNQXAC9IVRw';
-const POLL_INTERVAL_MS = 1500;
+const POLL_MIN_DELAY_MS = 1000;
+const POLL_MAX_DELAY_MS = 4000;
 
 function urlInput() {
   return screen.getByRole('textbox', { name: 'Track URL' });
@@ -109,7 +110,7 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { level: 2, name: 'AI-generated' })).toBeInTheDocument();
     expect(screen.getByText(/^Result from /)).toBeInTheDocument();
-    await act(() => vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 3));
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MAX_DELAY_MS * 3));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -175,7 +176,7 @@ describe('App', () => {
     await user.click(analyzeButton());
     await screen.findByText('Queued');
 
-    await act(() => vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS));
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MIN_DELAY_MS));
 
     expect(await screen.findByText('Me at the zoo')).toBeInTheDocument();
     expect(screen.getByText('jawed · 0:19')).toBeInTheDocument();
@@ -233,7 +234,7 @@ describe('App', () => {
     await user.click(analyzeButton());
     await screen.findByText('Queued');
 
-    await act(() => vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS));
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MIN_DELAY_MS));
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Could not download the track');
@@ -255,7 +256,7 @@ describe('App', () => {
 
     await user.type(urlInput(), `${VIDEO_URL}{Enter}`);
     await screen.findByText('Queued');
-    await act(() => vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS));
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MIN_DELAY_MS));
 
     expect(await screen.findByRole('heading', { level: 2, name: 'AI-generated' })).toBeInTheDocument();
     expect(screen.getByRole('meter', { name: 'Confidence' })).toHaveAttribute('aria-valuenow', '74');
@@ -275,7 +276,7 @@ describe('App', () => {
 
     await user.type(urlInput(), `${VIDEO_URL}{Enter}`);
     await screen.findByText('Queued');
-    await act(() => vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS));
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MIN_DELAY_MS));
 
     expect(await screen.findByRole('img', { name: 'Waveform of the analyzed excerpt' })).toBeInTheDocument();
     expect(screen.getByText('Running detectors')).toBeInTheDocument();
@@ -297,14 +298,75 @@ describe('App', () => {
 
     await user.type(urlInput(), `${VIDEO_URL}{Enter}`);
     await screen.findByText('Queued');
-    await act(() => vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS));
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MIN_DELAY_MS));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not refresh the analysis');
 
-    await act(() => vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS));
+    // A failed poll backs off before retrying.
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MIN_DELAY_MS * 2));
 
     expect(await screen.findByText('Downloading audio')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('sends the job ETag back and polls less often while the job stays unchanged', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const sentTags: (string | null)[] = [];
+    mockApi({
+      'POST /api/analyze': () => json(job(), 202),
+      'GET /api/analyze/job-1': (init) => {
+        const tag = new Headers(init?.headers).get('If-None-Match');
+        sentTags.push(tag);
+        return tag === null ? json(job({ status: 'Acquiring' }), 200, { ETag: '"1"' }) : notModified();
+      },
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<App />);
+
+    await user.type(urlInput(), `${VIDEO_URL}{Enter}`);
+    await screen.findByText('Queued');
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MIN_DELAY_MS));
+    expect(await screen.findByText('Downloading audio')).toBeInTheDocument();
+
+    // The first unchanged poll comes 1s later; after it the gap doubles, so the next is 2s later.
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MIN_DELAY_MS));
+    expect(sentTags).toEqual([null, '"1"']);
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MIN_DELAY_MS));
+    expect(sentTags).toHaveLength(2);
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MIN_DELAY_MS));
+    expect(sentTags).toEqual([null, '"1"', '"1"']);
+
+    // A 304 keeps the job already shown.
+    expect(screen.getByText('Downloading audio')).toBeInTheDocument();
+  });
+
+  it('pauses polling while the tab is hidden and polls as soon as it is shown again', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = mockApi({
+      'POST /api/analyze': () => json(job(), 202),
+      'GET /api/analyze/job-1': () => json(job({ status: 'Acquiring' })),
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<App />);
+
+    await user.type(urlInput(), `${VIDEO_URL}{Enter}`);
+    await screen.findByText('Queued');
+
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    try {
+      await act(() => vi.advanceTimersByTimeAsync(POLL_MAX_DELAY_MS * 3));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      // Drops the override so jsdom's own getter applies again.
+      delete (document as { visibilityState?: DocumentVisibilityState }).visibilityState;
+    }
+
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(await screen.findByText('Downloading audio')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('stops polling and says so when the job no longer exists', async () => {
@@ -318,13 +380,13 @@ describe('App', () => {
 
     await user.type(urlInput(), `${VIDEO_URL}{Enter}`);
     await screen.findByText('Queued');
-    await act(() => vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS));
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MIN_DELAY_MS));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('This analysis no longer exists');
     expect(screen.queryByText('Queued')).not.toBeInTheDocument();
 
     const calls = fetchMock.mock.calls.length;
-    await act(() => vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 3));
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MAX_DELAY_MS * 3));
     expect(fetchMock).toHaveBeenCalledTimes(calls);
   });
 });
