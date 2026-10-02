@@ -21,11 +21,16 @@ export function mockApi(routes: Record<string, Route>) {
   return fetchMock;
 }
 
-export function json(body: unknown, status = 200) {
+export function json(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
   });
+}
+
+/** The API's answer to a poll whose If-None-Match still matches the job. */
+export function notModified() {
+  return new Response(null, { status: 304 });
 }
 
 export function networkError(): never {

@@ -1,6 +1,7 @@
 using Api.Models.Analysis;
 using Core.Models;
 using Core.Services;
+using Microsoft.Net.Http.Headers;
 
 namespace Api.Endpoints;
 
@@ -19,7 +20,7 @@ public static class AnalysisEndpoints
 
         group.MapGet("/{id:guid}", GetAsync)
             .WithName("GetAnalysis")
-            .WithSummary("Returns the current state of a queued analysis.");
+            .WithSummary("Returns the current state of a queued analysis, or 304 if it has not changed since the ETag sent in If-None-Match.");
 
         return app;
     }
@@ -54,12 +55,30 @@ public static class AnalysisEndpoints
     private static async Task<IResult> GetAsync(
         Guid id,
         IAnalysisService analysis,
+        HttpContext http,
         CancellationToken cancellationToken)
     {
         var job = await analysis.GetAsync(id, cancellationToken);
 
-        return job is null
-            ? Results.NotFound()
-            : Results.Ok(AnalysisJobResponse.From(job));
+        if (job is null)
+        {
+            return Results.NotFound();
+        }
+
+        // Every write bumps UpdatedAt, so it versions the whole response. The client polls with it
+        // and gets an empty 304 while the job sits in a stage, instead of the job (and its
+        // visualization) again every time.
+        var etag = new EntityTagHeaderValue($"\"{job.UpdatedAt.UtcTicks}\"");
+        var responseHeaders = http.Response.GetTypedHeaders();
+        responseHeaders.ETag = etag;
+        responseHeaders.CacheControl = new CacheControlHeaderValue { NoCache = true };
+
+        var ifNoneMatch = http.Request.GetTypedHeaders().IfNoneMatch;
+        if (ifNoneMatch.Any(tag => tag.Equals(EntityTagHeaderValue.Any) || tag.Compare(etag, useStrongComparison: false)))
+        {
+            return Results.StatusCode(StatusCodes.Status304NotModified);
+        }
+
+        return Results.Ok(AnalysisJobResponse.From(job));
     }
 }

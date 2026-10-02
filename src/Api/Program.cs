@@ -4,6 +4,7 @@ using Api.BackgroundServices;
 using Api.Endpoints;
 using Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Net.Http.Headers;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -37,7 +38,11 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins("http://localhost:5173")
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            // Polling reads the job's ETag and sends it back in If-None-Match, which is not a
+            // simple header: without a cached preflight every poll would cost an extra OPTIONS.
+            .WithExposedHeaders(HeaderNames.ETag)
+            .SetPreflightMaxAge(TimeSpan.FromMinutes(10));
     });
 });
 
