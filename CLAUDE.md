@@ -65,7 +65,7 @@ Monorepo with two independently-run apps sharing one git history:
 
 ### Architecture reports
 - Ask Claude Code to "run the architecture-reporter agent" (`.claude/agents/architecture-reporter.md`). It's manual only, not part of any hook.
-- Each run writes a new self-contained `docs/architecture/architecture-YYYY-MM-DD_HHmmss.html` (open it in a browser; Mermaid loads from a CDN): a 3-tier view (presentation / application / data & integration) with styled Mermaid diagrams (tier overview, job state machine, deployment), detection signals, and roadmap position. Earlier reports are never edited or compared against. Commit them so git keeps the history of how the architecture changed.
+- Each run writes a new self-contained `docs/architecture/architecture-YYYY-MM-DD_HHmmss.html` (open it in a browser; Mermaid loads from a CDN): a 3-tier view (presentation / application / data & integration) with styled Mermaid diagrams (tier overview, job state machine, deployment), detection signals, and roadmap position. Earlier reports are never edited or compared against; the agent also points the architecture link at the top of `README.md` at the new report (published via GitHub Pages from `docs/`). Commit them so git keeps the history of how the architecture changed.
 
 ## Architecture notes
 
