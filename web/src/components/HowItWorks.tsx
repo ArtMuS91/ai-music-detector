@@ -18,7 +18,7 @@ const STEPS: { icon: ReactElement; title: string; text: string; listsSignals?: b
   {
     icon: <DownloadOutlined fontSize="small" />,
     title: 'Download',
-    text: 'Only the audio stream is fetched from YouTube.',
+    text: "Only the audio stream is fetched from YouTube. Spotify's audio is protected, so a Spotify track is analyzed from its closest YouTube match.",
   },
   {
     icon: <GraphicEqOutlined fontSize="small" />,

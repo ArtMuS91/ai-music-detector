@@ -18,11 +18,11 @@ describe('submitAnalysis', () => {
   it('surfaces the server validation message for a rejected url', async () => {
     mockApi({
       'POST /api/analyze': () =>
-        json({ errors: { Url: ['Not a YouTube or YouTube Music video link.'] } }, 400),
+        json({ errors: { Url: ['Not a YouTube, YouTube Music or Spotify track link.'] } }, 400),
     });
 
     const rejection = expect(submitAnalysis('not a link')).rejects;
-    await rejection.toThrow('Not a YouTube or YouTube Music video link.');
+    await rejection.toThrow('Not a YouTube, YouTube Music or Spotify track link.');
     await rejection.toBeInstanceOf(InvalidUrlError);
   });
 

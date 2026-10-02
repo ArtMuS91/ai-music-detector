@@ -2,8 +2,13 @@ using Core.Models;
 
 namespace Api.Models.Analysis;
 
-public sealed record TrackResponse(string? Title, string? Artist, string? Channel, double? DurationSeconds)
+public sealed record TrackResponse(
+    string? Title,
+    string? Artist,
+    string? Channel,
+    double? DurationSeconds,
+    string? MatchedUrl)
 {
     public static TrackResponse From(Track track)
-        => new(track.Title, track.Artist, track.Channel, track.Duration?.TotalSeconds);
+        => new(track.Title, track.Artist, track.Channel, track.Duration?.TotalSeconds, track.MatchedUrl);
 }

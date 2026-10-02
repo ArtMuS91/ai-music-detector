@@ -14,18 +14,70 @@ public sealed class AudioAcquisitionException(string message, Exception? innerEx
 /// here — the preprocessing stage owns format normalization, so acquisition stays
 /// free of an ffmpeg dependency.
 /// </summary>
+/// <remarks>
+/// Spotify's audio is DRM-protected, so a Spotify link is resolved to its title, artists and
+/// duration, and the audio comes from the best-matching YouTube video instead.
+/// </remarks>
 public sealed class YtDlpAudioAcquisitionService(
     IOptions<YtDlpOptions> options,
+    SpotifyEmbedClient spotify,
     ILogger<YtDlpAudioAcquisitionService> logger) : IAudioAcquisitionService
 {
+    /// <summary>How many YouTube search results a Spotify track is matched against.</summary>
+    internal const int SearchResultCount = 5;
+
+    /// <summary>A search result this close to the Spotify duration is taken to be the same recording.</summary>
+    internal static readonly TimeSpan MatchDurationTolerance = TimeSpan.FromSeconds(5);
+
     private readonly YtDlpOptions _options = options.Value;
 
-    public async Task<AcquiredAudio> AcquireAsync(string sourceUrl, CancellationToken cancellationToken = default)
+    public Task<AcquiredAudio> AcquireAsync(string sourceUrl, CancellationToken cancellationToken = default)
     {
-        if (!YouTubeUrl.TryParse(sourceUrl, out var url))
+        if (YouTubeUrl.TryParse(sourceUrl, out var youTubeUrl))
         {
-            throw new AudioAcquisitionException($"'{sourceUrl}' is not a YouTube video link.");
+            return DownloadAsync(youTubeUrl, cancellationToken);
         }
+
+        if (SpotifyUrl.TryParse(sourceUrl, out var spotifyUrl))
+        {
+            return AcquireFromSpotifyAsync(spotifyUrl, cancellationToken);
+        }
+
+        throw new AudioAcquisitionException($"'{sourceUrl}' is not a YouTube or Spotify track link.");
+    }
+
+    private async Task<AcquiredAudio> AcquireFromSpotifyAsync(SpotifyUrl url, CancellationToken cancellationToken)
+    {
+        SpotifyTrack spotifyTrack;
+        try
+        {
+            spotifyTrack = await spotify.GetTrackAsync(url, cancellationToken);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException
+            || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            logger.LogWarning(ex, "Could not read Spotify track {TrackId}.", url.TrackId);
+            throw new UserFacingException("Could not read the track's details from Spotify. Try again in a moment.");
+        }
+
+        var query = SearchQuery(spotifyTrack);
+        var candidates = await SearchYouTubeAsync(query, cancellationToken);
+        var match = PickMatch(candidates, spotifyTrack.Duration, _options.MaxDuration)
+            ?? throw new UserFacingException($"No YouTube video was found to analyze for \"{query}\".");
+
+        logger.LogInformation(
+            "Spotify track {TrackId} matched to YouTube video {VideoId} ({MatchedDuration} vs {SpotifyDuration}).",
+            url.TrackId,
+            match.Url.VideoId,
+            match.Duration,
+            spotifyTrack.Duration);
+
+        var acquired = await DownloadAsync(match.Url, cancellationToken);
+        return acquired with { Track = MergeSpotifyTrack(acquired.Track, spotifyTrack, url) };
+    }
+
+    private async Task<AcquiredAudio> DownloadAsync(YouTubeUrl url, CancellationToken cancellationToken)
+    {
 
         // Each download gets its own folder, so a failed or cancelled run's partial files
         // (.part, .ytdl) can be removed wholesale, and no stale file from an earlier job can
@@ -76,6 +128,102 @@ public sealed class YtDlpAudioAcquisitionService(
         {
             File.Delete(filePath);
         }
+    }
+
+    internal static string SearchQuery(SpotifyTrack track)
+        => track.Artists.Count > 0
+            ? $"{string.Join(", ", track.Artists)} - {track.Title}"
+            : track.Title;
+
+    /// <summary>
+    /// The first search result (YouTube ranks the official upload high) within
+    /// <see cref="MatchDurationTolerance"/> of the Spotify duration, or, failing that, the first
+    /// result at all: a best guess the UI flags by showing which video was analyzed.
+    /// </summary>
+    internal static SearchCandidate? PickMatch(
+        IReadOnlyList<SearchCandidate> candidates,
+        TimeSpan? spotifyDuration,
+        TimeSpan maxDuration)
+    {
+        // Live streams and longer videos would only be skipped by the download's own filter.
+        var eligible = candidates
+            .Where(candidate => !candidate.IsLive && !(candidate.Duration > maxDuration))
+            .ToList();
+
+        return eligible.FirstOrDefault(candidate => spotifyDuration is { } expected
+                && candidate.Duration is { } actual
+                && (actual - expected).Duration() <= MatchDurationTolerance)
+            ?? eligible.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Title, artists and duration come from Spotify, which names the track cleanly; channel,
+    /// description, tags and upload date stay those of the matched video. Spotify's release date
+    /// is deliberately not used as <see cref="Track.PublishedAt"/>: the distributor picks it, so it
+    /// can be backdated, unlike a YouTube upload date.
+    /// </summary>
+    internal static Track MergeSpotifyTrack(Track matched, SpotifyTrack spotifyTrack, SpotifyUrl url) => matched with
+    {
+        SourceUrl = url.CanonicalUrl,
+        MatchedUrl = matched.SourceUrl,
+        Title = spotifyTrack.Title,
+        Artist = spotifyTrack.Artists.Count > 0 ? string.Join(", ", spotifyTrack.Artists) : matched.Artist,
+        Duration = spotifyTrack.Duration ?? matched.Duration,
+    };
+
+    internal sealed record SearchCandidate(YouTubeUrl Url, TimeSpan? Duration, bool IsLive);
+
+    private async Task<IReadOnlyList<SearchCandidate>> SearchYouTubeAsync(string query, CancellationToken cancellationToken)
+    {
+        var result = await ExternalProcess.RunAsync(
+            _options.ExecutablePath,
+            [
+                "--flat-playlist",
+                "--dump-single-json",
+                "--no-warnings",
+                $"ytsearch{SearchResultCount}:{query}",
+            ],
+            _options.Timeout,
+            logger,
+            cancellationToken);
+
+        if (result.ExitCode != 0)
+        {
+            logger.LogWarning("yt-dlp search exited with {ExitCode} for {Query}: {Error}", result.ExitCode, query, result.Stderr);
+            throw new AudioAcquisitionException(
+                $"yt-dlp search failed (exit code {result.ExitCode}): {ExternalProcess.Summarize(result.Stderr)}");
+        }
+
+        using var document = JsonDocument.Parse(result.Stdout);
+        return SearchCandidatesFrom(document.RootElement);
+    }
+
+    /// <summary>Maps yt-dlp's <c>--flat-playlist --dump-single-json</c> output for a <c>ytsearchN:</c> query.</summary>
+    internal static IReadOnlyList<SearchCandidate> SearchCandidatesFrom(JsonElement root)
+    {
+        if (!root.TryGetProperty("entries", out var entries) || entries.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var candidates = new List<SearchCandidate>();
+        foreach (var entry in entries.EnumerateArray())
+        {
+            // Only videos have a watch URL; anything else a search returns is skipped.
+            if (!YouTubeUrl.TryParse(GetString(entry, "url"), out var url))
+            {
+                continue;
+            }
+
+            candidates.Add(new SearchCandidate(
+                url,
+                entry.TryGetProperty("duration", out var duration) && duration.TryGetDouble(out var seconds)
+                    ? TimeSpan.FromSeconds(seconds)
+                    : null,
+                GetString(entry, "live_status") is "is_live" or "is_upcoming"));
+        }
+
+        return candidates;
     }
 
     private string WorkingDirectory => Path.GetFullPath(

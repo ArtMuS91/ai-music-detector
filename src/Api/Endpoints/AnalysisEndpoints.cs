@@ -14,7 +14,7 @@ public static class AnalysisEndpoints
 
         group.MapPost("/", SubmitAsync)
             .WithName("SubmitAnalysis")
-            .WithSummary("Queues a YouTube / YouTube Music track for analysis, or returns its earlier completed result.")
+            .WithSummary("Queues a YouTube / YouTube Music / Spotify track for analysis, or returns its earlier completed result.")
             .RequireRateLimiting(SubmitRateLimitPolicy);
 
         group.MapGet("/{id:guid}", GetAsync)
@@ -35,7 +35,7 @@ public static class AnalysisEndpoints
         {
             return Results.ValidationProblem(new Dictionary<string, string[]>
             {
-                [nameof(request.Url)] = ["Not a YouTube or YouTube Music video link."],
+                [nameof(request.Url)] = ["Not a YouTube, YouTube Music or Spotify track link."],
             });
         }
 

@@ -8,7 +8,7 @@ const VIDEO_URL = 'https://music.youtube.com/watch?v=jNQXAC9IVRw';
 const POLL_INTERVAL_MS = 1500;
 
 function urlInput() {
-  return screen.getByRole('textbox', { name: 'YouTube URL' });
+  return screen.getByRole('textbox', { name: 'Track URL' });
 }
 
 function analyzeButton() {
@@ -16,11 +16,14 @@ function analyzeButton() {
 }
 
 describe('App', () => {
-  it('suggests a YouTube Music link as the placeholder', () => {
+  it('suggests YouTube Music and Spotify links as the placeholder', () => {
     mockApi({});
     render(<App />);
 
-    expect(urlInput()).toHaveAttribute('placeholder', 'https://music.youtube.com/watch?v=');
+    expect(urlInput()).toHaveAttribute(
+      'placeholder',
+      'https://music.youtube.com/watch?v= or https://open.spotify.com/track/',
+    );
   });
 
   it('explains how the analysis works beside the form', () => {
@@ -113,7 +116,7 @@ describe('App', () => {
   it('shows the server validation message for a rejected url', async () => {
     mockApi({
       'POST /api/analyze': () =>
-        json({ errors: { Url: ['Not a YouTube or YouTube Music video link.'] } }, 400),
+        json({ errors: { Url: ['Not a YouTube, YouTube Music or Spotify track link.'] } }, 400),
     });
     const user = userEvent.setup();
     render(<App />);
@@ -121,24 +124,24 @@ describe('App', () => {
     await user.type(urlInput(), 'https://vimeo.com/123');
     await user.click(analyzeButton());
 
-    expect(await screen.findByText('Not a YouTube or YouTube Music video link.')).toBeInTheDocument();
-    expect(urlInput()).toHaveAccessibleDescription('Not a YouTube or YouTube Music video link.');
+    expect(await screen.findByText('Not a YouTube, YouTube Music or Spotify track link.')).toBeInTheDocument();
+    expect(urlInput()).toHaveAccessibleDescription('Not a YouTube, YouTube Music or Spotify track link.');
     expect(urlInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('clears the url error once the url is edited', async () => {
     mockApi({
       'POST /api/analyze': () =>
-        json({ errors: { Url: ['Not a YouTube or YouTube Music video link.'] } }, 400),
+        json({ errors: { Url: ['Not a YouTube, YouTube Music or Spotify track link.'] } }, 400),
     });
     const user = userEvent.setup();
     render(<App />);
     await user.type(urlInput(), 'https://vimeo.com/123{Enter}');
-    await screen.findByText('Not a YouTube or YouTube Music video link.');
+    await screen.findByText('Not a YouTube, YouTube Music or Spotify track link.');
 
     await user.type(urlInput(), '4');
 
-    expect(screen.queryByText('Not a YouTube or YouTube Music video link.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Not a YouTube, YouTube Music or Spotify track link.')).not.toBeInTheDocument();
     expect(urlInput()).toHaveAttribute('aria-invalid', 'false');
   });
 
@@ -161,7 +164,7 @@ describe('App', () => {
         json(
           job({
             status: 'Preprocessing',
-            track: { title: 'Me at the zoo', artist: 'jawed', channel: 'jawed', durationSeconds: 19 },
+            track: { title: 'Me at the zoo', artist: 'jawed', channel: 'jawed', durationSeconds: 19, matchedUrl: null },
           }),
         ),
     });
@@ -177,6 +180,37 @@ describe('App', () => {
     expect(await screen.findByText('Me at the zoo')).toBeInTheDocument();
     expect(screen.getByText('jawed · 0:19')).toBeInTheDocument();
     expect(screen.getByText('Preprocessing audio')).toBeInTheDocument();
+  });
+
+  it('links the YouTube video a Spotify track was analyzed from', async () => {
+    mockApi({
+      'POST /api/analyze': () =>
+        json(
+          job({
+            sourceUrl: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC',
+            status: 'Completed',
+            track: {
+              title: 'Never Gonna Give You Up',
+              artist: 'Rick Astley',
+              channel: 'Rick Astley',
+              durationSeconds: 213.6,
+              matchedUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            },
+            result: result(),
+          }),
+          200,
+        ),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(urlInput(), 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC{Enter}');
+
+    expect(await screen.findByRole('link', { name: 'YouTube match' })).toHaveAttribute(
+      'href',
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    );
+    expect(screen.getByText('Rick Astley · 3:34')).toBeInTheDocument();
   });
 
   it('shows the failure reason and stops the progress bar when a job fails', async () => {

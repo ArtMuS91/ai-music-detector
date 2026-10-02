@@ -1,0 +1,63 @@
+{
+  "id": "Rick Astley - Never Gonna Give You Up",
+  "title": "Rick Astley - Never Gonna Give You Up",
+  "_type": "playlist",
+  "extractor": "youtube:search",
+  "entries": [
+    {
+      "_type": "url",
+      "ie_key": "Youtube",
+      "id": "dQw4w9WgXcQ",
+      "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "title": "Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)",
+      "duration": 214,
+      "channel": "Rick Astley",
+      "uploader": "Rick Astley",
+      "live_status": null
+    },
+    {
+      "_type": "url",
+      "ie_key": "Youtube",
+      "id": "3BFTio5296w",
+      "url": "https://www.youtube.com/watch?v=3BFTio5296w",
+      "title": "Never Gonna Give You Up (2022 Remaster)",
+      "duration": 214,
+      "channel": "Rick Astley",
+      "uploader": "Rick Astley",
+      "live_status": null
+    },
+    {
+      "_type": "url",
+      "ie_key": "Youtube",
+      "id": "5SZYz7lZRRI",
+      "url": "https://www.youtube.com/watch?v=5SZYz7lZRRI",
+      "title": "Rick Astley - Never Gonna Give You Up (Official Music Video) (1987)",
+      "duration": 213,
+      "channel": "Super Top Songs",
+      "uploader": "Super Top Songs",
+      "live_status": null
+    },
+    {
+      "_type": "url",
+      "ie_key": "Youtube",
+      "id": "7FwDP17XPlk",
+      "url": "https://www.youtube.com/watch?v=7FwDP17XPlk",
+      "title": "Rick Astley - Never Gonna Give You Up",
+      "duration": 214,
+      "channel": "Amazing Lyrics",
+      "uploader": "Amazing Lyrics",
+      "live_status": null
+    },
+    {
+      "_type": "url",
+      "ie_key": "Youtube",
+      "id": "XGxIE1hr0w4",
+      "url": "https://www.youtube.com/watch?v=XGxIE1hr0w4",
+      "title": "Never Gonna Give You Up | Rick Astley Rocks New Year's Eve - BBC",
+      "duration": 234,
+      "channel": "BBC",
+      "uploader": "BBC",
+      "live_status": null
+    }
+  ]
+}
