@@ -2,6 +2,8 @@
 
 Music track analyser to detect if it fully or partially AI generated
 
+**Architecture:** [latest architecture report](https://artmus91.github.io/ai-music-detector/architecture/architecture-2026-10-01_140902.html)
+
 ## Demo
 
 Paste a YouTube or YouTube Music link and get a verdict (AI-generated, human-made or mixed) with an AI likelihood, a confidence score, the signals behind it and a written explanation.
