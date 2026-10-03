@@ -59,6 +59,11 @@ Monorepo with two independently-run apps sharing one git history:
 - Test: `npm test` (Vitest + React Testing Library on jsdom, single run); `npm run test:watch` for watch mode
 - Preview production build: `npm run preview`
 
+### Self-hosting (production)
+- `docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile quick-tunnel up -d --build` (or `--profile tunnel` with `CLOUDFLARE_TUNNEL_TOKEN` in `.env`). Needs `POSTGRES_PASSWORD` in `.env`. Full steps are in README "Self-hosting".
+- The overlay adds `web` (`web/Dockerfile`: a Vite build with `VITE_API_BASE_URL` empty, served by nginx; `web/nginx.conf` proxies `/api` to `api:8080`) and a `cloudflared` service. It sets `ASPNETCORE_ENVIRONMENT=Production`, publishes nothing except `web` on `127.0.0.1:8080` (it uses `ports: !reset []`), and gives Postgres a separate `postgres-prod-data` volume.
+- The browser only ever talks to one origin, so the CORS policy is irrelevant in production. The submit rate limiter partitions by `RemoteIpAddress`, and that is correct only because nginx overwrites `X-Forwarded-For` with Cloudflare's `CF-Connecting-IP` and `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` makes the API trust it. Keep the API port unpublished in prod, or clients could spoof that header.
+
 ### Pre-commit AI review
 - `.githooks/pre-commit` runs the `code-reviewer` agent (`.claude/agents/code-reviewer.md`) headlessly over the staged diff. Enable once per clone: `git config core.hooksPath .githooks`.
 - The agent's last output line is `VERDICT: PASS|WARN|FAIL`; only `FAIL` (a Critical finding) blocks the commit. `AI_REVIEW_STRICT=1` also blocks on `WARN`; `SKIP_AI_REVIEW=1` or `git commit --no-verify` skips the review; `AI_REVIEW_TIMEOUT` (seconds, default 900) bounds it.

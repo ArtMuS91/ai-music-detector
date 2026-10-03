@@ -46,3 +46,30 @@ npm run dev
 ```
 
 Serves the app at http://localhost:5173. The app calls the API's `/health` endpoint on load to confirm connectivity (set `VITE_API_BASE_URL` to override the default `http://localhost:5214`).
+
+## Self-hosting (your own PC + Cloudflare Tunnel)
+
+`docker-compose.prod.yml` layers a production setup over `docker-compose.yml`. It adds the built web app behind nginx, which proxies `/api` to the API, so everything is served from one origin, and a `cloudflared` container that publishes it over HTTPS. No ports are opened on your router. Running from a home connection also keeps yt-dlp working, because YouTube often blocks downloads from datacenter IPs.
+
+1. Add a database password to the gitignored `.env` (it only takes effect on the first start; the production database has its own volume, separate from dev):
+   ```
+   POSTGRES_PASSWORD=<long random string>
+   ```
+2. Start it with **one** of the tunnel profiles:
+   - **Quick tunnel** (no Cloudflare account; the URL changes on every restart):
+     ```
+     docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile quick-tunnel up -d --build
+     docker logs aimusicdetector-quick-tunnel 2>&1 | grep trycloudflare.com              # bash
+     docker logs aimusicdetector-quick-tunnel 2>&1 | Select-String trycloudflare.com     # PowerShell
+     ```
+   - **Named tunnel** (stable hostname on a domain you have in Cloudflare): in the Cloudflare dashboard, create a tunnel under *Zero Trust → Networks → Tunnels* and add a public hostname with service `http://web:80`. Put its token in `.env` as `CLOUDFLARE_TUNNEL_TOKEN=...`, then:
+     ```
+     docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile tunnel up -d --build
+     ```
+3. To check it without the tunnel, open http://localhost:8080.
+
+Notes:
+- The prod stack uses the same container names as the dev stack, so starting one replaces the other.
+- Containers restart on their own (`restart: unless-stopped`). For the site to come back after a reboot, Docker Desktop has to start on login, and the PC must not go to sleep.
+- yt-dlp is fetched when the API image is built. When YouTube downloads start failing, rebuild with `--build --pull` to pick up a newer yt-dlp.
+- Submissions are rate-limited per visitor IP: nginx passes Cloudflare's `CF-Connecting-IP` header on to the API as `X-Forwarded-For`.

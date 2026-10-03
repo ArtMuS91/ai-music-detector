@@ -1,0 +1,66 @@
+# Self-hosting overlay: serves the built web app behind nginx and publishes it through a Cloudflare Tunnel.
+# Use it on top of the base file, adding exactly one tunnel profile:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile quick-tunnel up -d --build
+# See "Self-hosting" in README.md.
+
+services:
+  postgres:
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    # Only the API talks to it, over the compose network.
+    ports: !reset []
+    volumes:
+      # Separate from the dev volume, so POSTGRES_PASSWORD applies (Postgres only reads it on first init).
+      - postgres-prod-data:/var/lib/postgresql/data
+
+  ml:
+    restart: unless-stopped
+    ports: !reset []
+
+  api:
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=aimusicdetector;Username=postgres;Password=${POSTGRES_PASSWORD}
+      # Trust X-Forwarded-For from nginx, the only thing that can reach the API (its port is not published).
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+    ports: !reset []
+
+  web:
+    build:
+      context: web
+    container_name: aimusicdetector-web
+    restart: unless-stopped
+    ports:
+      # Localhost only, for checking the site without the tunnel; the tunnel reaches it as web:80.
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - api
+
+  # No Cloudflare account needed; a random https://*.trycloudflare.com URL that changes on every restart
+  # (find it with: docker compose logs quick-tunnel).
+  quick-tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: aimusicdetector-quick-tunnel
+    profiles: [quick-tunnel]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://web:80
+    depends_on:
+      - web
+
+  # A stable hostname on your own Cloudflare domain; the tunnel's public hostname must point at http://web:80.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: aimusicdetector-tunnel
+    profiles: [tunnel]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      # From .env; not `:?`, because compose would then demand it even when this profile is off.
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - web
+
+volumes:
+  postgres-prod-data:
